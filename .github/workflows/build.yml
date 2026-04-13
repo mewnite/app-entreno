@@ -27,7 +27,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-venv python3-pip git unzip build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget
+          sudo apt-get install -y python3 python3-venv python3-pip git unzip build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget libltdl-dev autoconf-archive
 
       - name: Setup Android SDK + FIX sdkmanager
         run: |
@@ -62,18 +62,13 @@ jobs:
             "build-tools;34.0.0" \
             "cmdline-tools;latest"
 
-          # ====================== WRAPPER DEFINITIVO ======================
+          # Wrapper definitivo sdkmanager
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-
-          printf '#!/bin/bash\nexec /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager "$@"\n' > /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          echo '#!/bin/bash' > /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          echo 'exec /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager "$@"' >> /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
           chmod +x /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
-          # Debug del wrapper
-          echo "=== WRAPPER CREADO ==="
-          cat /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          echo "===================="
-
-          # Copiamos SDK completo a la carpeta de Buildozer
+          # Copiamos SDK a carpeta de Buildozer
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk
           cp -r $ANDROID_HOME/* /home/runner/.buildozer/android/platform/android-sdk/ 2>/dev/null || true
 
