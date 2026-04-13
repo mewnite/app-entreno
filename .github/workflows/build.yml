@@ -55,6 +55,8 @@ jobs:
           sdkmanager --sdk_root=${ANDROID_HOME} "platform-tools" "platforms;android-31" "build-tools;34.0.0"
 
           # Also set up buildozer's SDK location with licenses
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk
+          cp -r $ANDROID_HOME/* /home/runner/.buildozer/android/platform/android-sdk/
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
           echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
@@ -89,6 +91,9 @@ jobs:
       - name: Run Buildozer
         env:
           JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          ANDROID_HOME: /home/runner/android-sdk
+          ANDROID_SDK_ROOT: /home/runner/android-sdk
+          ANDROIDSDK: /home/runner/android-sdk
         run: |
           . venv/bin/activate
           pip install --upgrade pip
