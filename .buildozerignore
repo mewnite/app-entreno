@@ -1,0 +1,14 @@
+gimrutine-*.json
+.venv
+venv
+build/
+dist/
+*.pyc
+__pycache__/
+local.properties
+buildozer.spec
+/.git
+*.keystore
+*.iml
+.idea/
+data/presplash.png
