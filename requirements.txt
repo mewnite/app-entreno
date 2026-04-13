@@ -1,0 +1,6 @@
+kivy>=2.1.0
+gspread>=5.0.0
+google-auth>=2.0.0
+pytesseract>=0.3.10
+opencv-python>=4.5.0
+Pillow>=8.0.0
