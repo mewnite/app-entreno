@@ -45,7 +45,6 @@ jobs:
 
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
-          # Debug: verificar que estamos usando Java 17
           echo "=== Java version being used ==="
           java -version
           echo "=============================="
@@ -56,20 +55,25 @@ jobs:
           echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
           echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" >> $ANDROID_HOME/licenses/android-sdk-license
 
-          # Instalar paquetes necesarios
+          # Instalar paquetes necesarios (ya lo hacemos aquí para que Buildozer no tenga que hacerlo)
           sdkmanager --sdk_root=${ANDROID_HOME} \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;34.0.0" \
             "cmdline-tools;latest"
 
-          # ====================== FIX sdkmanager (ruta legacy) ======================
+          # ====================== FIX SDKMANAGER (el error actual) ======================
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-          cp $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-             /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+
+          # Wrapper inteligente: llama al sdkmanager REAL (soluciona el ClassNotFound)
+          cat > /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager << 'EOF'
+#!/bin/bash
+# Wrapper para que Buildozer use el sdkmanager moderno correctamente
+exec "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$@"
+EOF
           chmod +x /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
-          # Copiar SDK completo a la carpeta de Buildozer
+          # Copiamos todo el SDK a la carpeta que Buildozer usa
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk
           cp -r $ANDROID_HOME/* /home/runner/.buildozer/android/platform/android-sdk/ 2>/dev/null || true
 
