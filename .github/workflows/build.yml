@@ -9,7 +9,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    container:
+      image: ubuntu:22.04
+      options: --user root
     steps:
+      - name: Install Git
+        run: |
+          apt-get update
+          apt-get install -y git
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -21,19 +29,19 @@ jobs:
 
       - name: Install system deps
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3 python3-venv python3-pip git unzip openjdk-11-jdk build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev libgdbm-dev liblzma-dev pkg-config
+          apt-get update
+          apt-get install -y python3 python3-venv python3-pip git unzip openjdk-11-jdk build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget
 
       - name: Create Python venv
         run: |
           python3 -m venv venv
-          source venv/bin/activate
+          . venv/bin/activate
           python -V
           pip install --upgrade pip setuptools wheel
 
       - name: Install python packages
         run: |
-          source venv/bin/activate
+          . venv/bin/activate
           pip install Cython==0.29.34 buildozer
 
       - name: Ensure build ignores credentials
@@ -50,7 +58,7 @@ jobs:
         env:
           JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
         run: |
-          source venv/bin/activate
+          . venv/bin/activate
           pip install --upgrade pip
           buildozer -v android debug
 
