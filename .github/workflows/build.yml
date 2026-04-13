@@ -18,16 +18,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '17'
 
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-venv python3-pip git unzip openjdk-11-jdk build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget
+          sudo apt-get install -y python3 python3-venv python3-pip git unzip build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget
 
       - name: Setup Android SDK
         run: |
@@ -35,7 +35,7 @@ jobs:
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           mkdir -p $ANDROID_HOME
 
-          # Descargamos cmdline-tools actual (2025-2026)
+          # Descargamos cmdline-tools actual
           cd /tmp
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
@@ -45,31 +45,34 @@ jobs:
 
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
+          # Debug: verificar que estamos usando Java 17
+          echo "=== Java version being used ==="
+          java -version
+          echo "=============================="
+
           # Aceptar licencias
           mkdir -p $ANDROID_HOME/licenses
           echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
           echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
           echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" >> $ANDROID_HOME/licenses/android-sdk-license
 
-          # Instalar paquetes que necesita tu buildozer.spec (API 33)
+          # Instalar paquetes necesarios
           sdkmanager --sdk_root=${ANDROID_HOME} \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;34.0.0" \
             "cmdline-tools;latest"
 
-          # ====================== FIX DEL ERROR sdkmanager ======================
-          # Creamos la ruta antigua que Buildozer sigue buscando
+          # ====================== FIX sdkmanager (ruta legacy) ======================
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
           cp $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
              /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
           chmod +x /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
-          # Copiamos todo el SDK a la carpeta que usa Buildozer
+          # Copiar SDK completo a la carpeta de Buildozer
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk
           cp -r $ANDROID_HOME/* /home/runner/.buildozer/android/platform/android-sdk/ 2>/dev/null || true
 
-          # Licencias también en la carpeta de Buildozer
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
           cp -r $ANDROID_HOME/licenses/* /home/runner/.buildozer/android/platform/android-sdk/licenses/ 2>/dev/null || true
 
@@ -101,7 +104,6 @@ jobs:
 
       - name: Run Buildozer
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
           ANDROID_HOME: /home/runner/android-sdk
           ANDROID_SDK_ROOT: /home/runner/android-sdk
           ANDROIDSDK: /home/runner/android-sdk
