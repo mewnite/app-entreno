@@ -9,14 +9,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    container:
-      image: ubuntu:22.04
-      options: --user root
     steps:
       - name: Install Git
         run: |
-          apt-get update
-          apt-get install -y git
+          sudo apt-get update
+          sudo apt-get install -y git
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,8 +26,8 @@ jobs:
 
       - name: Install system deps
         run: |
-          apt-get update
-          apt-get install -y python3 python3-venv python3-pip git unzip openjdk-11-jdk build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-venv python3-pip git unzip openjdk-11-jdk build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget
 
       - name: Create Python venv
         run: |
