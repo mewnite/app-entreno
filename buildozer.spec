@@ -19,8 +19,8 @@ android.accept_licenses = True
 [app:android]
 android.api = 33
 android.minapi = 21
-android.sdk = 29
-android.ndk = 25b
+android.sdk = 33
+android.ndk = 21
 android.permissions = INTERNET, CAMERA, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 android.arch = armeabi-v7a, arm64-v8a
 
