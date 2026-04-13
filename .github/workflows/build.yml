@@ -29,7 +29,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3 python3-venv python3-pip git unzip build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev wget
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK + FIX sdkmanager
         run: |
           export ANDROID_HOME=$HOME/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
@@ -45,35 +45,35 @@ jobs:
 
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
-          echo "=== Java version being used ==="
+          echo "=== Java version ==="
           java -version
-          echo "=============================="
+          echo "===================="
 
-          # Aceptar licencias
+          # Licencias
           mkdir -p $ANDROID_HOME/licenses
           echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
           echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
           echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" >> $ANDROID_HOME/licenses/android-sdk-license
 
-          # Instalar paquetes necesarios (ya lo hacemos aquí para que Buildozer no tenga que hacerlo)
+          # Instalamos paquetes
           sdkmanager --sdk_root=${ANDROID_HOME} \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;34.0.0" \
             "cmdline-tools;latest"
 
-          # ====================== FIX SDKMANAGER (el error actual) ======================
+          # ====================== WRAPPER DEFINITIVO ======================
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
 
-          # Wrapper inteligente: llama al sdkmanager REAL (soluciona el ClassNotFound)
-          cat > /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager << 'EOF'
-#!/bin/bash
-# Wrapper para que Buildozer use el sdkmanager moderno correctamente
-exec "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$@"
-EOF
+          printf '#!/bin/bash\nexec /home/runner/android-sdk/cmdline-tools/latest/bin/sdkmanager "$@"\n' > /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
           chmod +x /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
-          # Copiamos todo el SDK a la carpeta que Buildozer usa
+          # Debug del wrapper
+          echo "=== WRAPPER CREADO ==="
+          cat /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          echo "===================="
+
+          # Copiamos SDK completo a la carpeta de Buildozer
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk
           cp -r $ANDROID_HOME/* /home/runner/.buildozer/android/platform/android-sdk/ 2>/dev/null || true
 
