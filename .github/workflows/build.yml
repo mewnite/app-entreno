@@ -35,9 +35,9 @@ jobs:
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           mkdir -p $ANDROID_HOME
 
-          # Download and install cmdline-tools
+          # Descargamos cmdline-tools actual (2025-2026)
           cd /tmp
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
           mkdir -p $ANDROID_HOME/cmdline-tools
           mv cmdline-tools $ANDROID_HOME/cmdline-tools/latest
@@ -45,26 +45,37 @@ jobs:
 
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
-          # Accept ALL licenses
+          # Aceptar licencias
           mkdir -p $ANDROID_HOME/licenses
           echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
           echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
           echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" >> $ANDROID_HOME/licenses/android-sdk-license
 
-          # Install required packages
-          sdkmanager --sdk_root=${ANDROID_HOME} "platform-tools" "platforms;android-31" "build-tools;34.0.0"
+          # Instalar paquetes que necesita tu buildozer.spec (API 33)
+          sdkmanager --sdk_root=${ANDROID_HOME} \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;34.0.0" \
+            "cmdline-tools;latest"
 
-          # Also set up buildozer's SDK location with licenses
+          # ====================== FIX DEL ERROR sdkmanager ======================
+          # Creamos la ruta antigua que Buildozer sigue buscando
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
+          cp $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+             /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          chmod +x /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+
+          # Copiamos todo el SDK a la carpeta que usa Buildozer
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk
-          cp -r $ANDROID_HOME/* /home/runner/.buildozer/android/platform/android-sdk/
+          cp -r $ANDROID_HOME/* /home/runner/.buildozer/android/platform/android-sdk/ 2>/dev/null || true
+
+          # Licencias también en la carpeta de Buildozer
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          cp -r $ANDROID_HOME/licenses/* /home/runner/.buildozer/android/platform/android-sdk/licenses/ 2>/dev/null || true
 
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROIDSDK=$ANDROID_HOME" >> $GITHUB_ENV
-
 
       - name: Create Python venv
         run: |
@@ -94,6 +105,7 @@ jobs:
           ANDROID_HOME: /home/runner/android-sdk
           ANDROID_SDK_ROOT: /home/runner/android-sdk
           ANDROIDSDK: /home/runner/android-sdk
+          P4A_ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
         run: |
           . venv/bin/activate
           pip install --upgrade pip
