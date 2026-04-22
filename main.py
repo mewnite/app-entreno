@@ -4,7 +4,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.metrics import dp
 from sheets import GoogleSheetsClient
-from ocr import extract_text_from_image, parse_ocr_to_fields
+from ocr import parse_ocr_to_fields, extract_text_from_image
 from utils import Config
 import os
 
@@ -319,14 +319,30 @@ class ManualScreen(Screen):
             rutina = self.ids.rutina.text
             meso = self.ids.mesociclo.text
             micro = self.ids.microciclo.text
-            # Build rows and send as a block for better performance and formatting
+            # Build rows (A..K) to match the sheet template (like the reference image)
             rows = []
             for ex in exercises:
-                row = [fecha, rutina, meso, micro,
-                       ex.get('Ejercicio',''), ex.get('Series',''), ex.get('Método',''), ex.get('Tiempo',''),
-                       ex.get('Reps Semana Anterior',''), ex.get('Reps',''), ex.get('Peso',''), ex.get('RIR',''), ex.get('Anotaciones','')]
+                # Columns: Dia, Ejercicio, Series, Metodo, TEMPO, Tiempo descanso,
+                #          Reps semana anterior, Reps, Peso utilizado, RIR, Anotaciones
+                row = [
+                    rutina,
+                    ex.get('Ejercicio', ''),
+                    ex.get('Series', ''),
+                    ex.get('Método', ''),
+                    ex.get('Tiempo', ''),  # mapped to TEMPO
+                    '',  # descanso (no hay campo dedicado en UI)
+                    ex.get('Reps Semana Anterior', ''),
+                    ex.get('Reps', ''),
+                    ex.get('Peso', ''),
+                    ex.get('RIR', ''),
+                    ex.get('Anotaciones', ''),
+                ]
                 rows.append(row)
-            client.append_training(sheet_name, {'Fecha': fecha, 'Rutina': rutina, 'Mesociclo': meso, 'Microciclo': micro}, rows)
+            client.append_training(
+                sheet_name,
+                {'Fecha': fecha, 'Rutina': rutina, 'Mesociclo': meso, 'Microciclo': micro},
+                rows,
+            )
             TrainingSession.clear()
             self.refresh_exercise_list()
             from kivy.uix.popup import Popup

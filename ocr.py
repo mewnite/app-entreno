@@ -1,11 +1,32 @@
-import pytesseract
-import cv2
 import os
 import re
-from PIL import Image
+
+# NOTE:
+# On Android (Buildozer), `opencv-python` and `pytesseract` are typically unavailable unless you
+# add custom recipes/native integration. Import them lazily so the app can start without OCR.
+try:
+    import cv2  # type: ignore
+except Exception:  # pragma: no cover
+    cv2 = None
+
+try:
+    import pytesseract  # type: ignore
+except Exception:  # pragma: no cover
+    pytesseract = None
+
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover
+    Image = None
 
 
 def extract_text_from_image(path: str) -> str:
+    if cv2 is None or pytesseract is None or Image is None:
+        raise RuntimeError(
+            "OCR no disponible en este dispositivo/build. "
+            "En Android, `opencv-python` y `pytesseract` no vienen incluidos por defecto: "
+            "usa OCR en la nube o integra una solución nativa (ML Kit / tess-two)."
+        )
     if not os.path.exists(path):
         raise FileNotFoundError(path)
     # Read with OpenCV

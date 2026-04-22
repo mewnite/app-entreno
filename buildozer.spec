@@ -5,7 +5,7 @@ package.domain = org.example
 source.dir = .
 source.include_exts = py,png,jpg,kv,json
 version = 0.1
-requirements = python3,kivy==2.3.0,pillow
+requirements = python3,kivy==2.3.0,pillow,gspread,google-auth
 # Note: OpenCV and pytesseract are not trivially available on Android via pip.
 # OCR on Android should use ML Kit or a native tess/tess-two recipe.
 # If you add opencv or other recipes, include them here.

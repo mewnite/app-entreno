@@ -116,10 +116,7 @@ class GoogleSheetsClient:
                     raise
 
     def append_training(self, spreadsheet_title: str, session_meta: dict, rows: list):
-        """Append a training block: one metadata row (fecha, rutina, meso, micro) and multiple exercise rows.
-
-        Applies basic formatting: bold metadata row and header, freezes header row.
-        """
+        """Append a training block (exercise rows) using the template layout."""
         if self.client is None:
             raise RuntimeError('Cliente no configurado. Llama a configure_from_service_account() primero.')
 
@@ -133,40 +130,35 @@ class GoogleSheetsClient:
             # non-fatal, continue
             pass
 
-        # Prepare metadata row: first 4 columns filled, rest empty to match total columns
-        meta_row = [session_meta.get('Fecha',''), session_meta.get('Rutina',''), session_meta.get('Mesociclo',''), session_meta.get('Microciclo','')]
-        total_columns = 15
-        meta_row += [''] * (total_columns - len(meta_row))
+        # Update top meta values (like the reference image: Mesociclo=2, Microciclo=2/3, etc.)
+        # Layout:
+        # - A1:A2 merged -> "Fecha"
+        # - G1 -> "Mesociclo", H1 -> value
+        # - I1 -> "Microciclo (semana)", J1 -> value
+        try:
+            ws.update('H1', [[session_meta.get('Mesociclo', '')]])
+            ws.update('J1', [[session_meta.get('Microciclo', '')]])
+        except Exception:
+            pass
 
-        # Get current number of rows to know where metadata will be
+        if not rows:
+            return
+
+        # Append exercise rows (data begins on row 3)
         existing = ws.get_all_values()
         start_index = len(existing) + 1
-
-        # Append metadata and exercise rows in bulk to reduce API calls
         try:
-            ws.append_row(meta_row)
-            # rows is list of lists
-            if rows:
-                ws.append_rows(rows, value_input_option='RAW')
-        except Exception as e:
+            ws.append_rows(rows, value_input_option='RAW')
+        except Exception:
             raise
 
-        # Formatting: make metadata row bold and header row (row 1) bold, freeze header
+        # Add a red separator row (like the screenshot bottom band)
         try:
-            # Bold metadata row
-            meta_range = f'A{start_index}:O{start_index}'
-            ws.format(meta_range, {
-                'textFormat': {'bold': True}
-            })
-            # Bold header rows (first two)
-            ws.format('A1:O2', {'textFormat': {'bold': True}})
-            # Freeze first two rows
-            try:
-                ws.freeze(rows=2)
-            except Exception:
-                pass
+            sep_row = [''] * 11  # A..K
+            ws.append_row(sep_row)
+            sep_idx = start_index + len(rows)
+            ws.format(f'A{sep_idx}:K{sep_idx}', {'backgroundColor': {'red': 0.85, 'green': 0.2, 'blue': 0.2}})
         except Exception:
-            # non-fatal
             pass
 
     def _ensure_template(self, sh):
@@ -180,31 +172,28 @@ class GoogleSheetsClient:
         except Exception:
             pass
 
-        # Define headers (15 columns A..O)
-        header1 = ['Fecha', 'Rutina', 'Mesociclo', 'Microciclo'] + [''] * 11
-        header2 = ['Dia', 'Ejercicio', 'Series', 'Método', 'TEMPO', 'Tiempo descanso', 'Reps Semana Anterior', 'Reps', 'Peso', 'RIR', 'Anotaciones']
-        # pad header2 to 15
-        if len(header2) < 15:
-            header2 += [''] * (15 - len(header2))
-
-        # Update values for first two rows
-        ws.update('A1:O2', [header1, header2])
+        # Template columns (A..K)
+        # Row 1 contains merged headers (like the reference image)
+        row1 = ['Fecha', 'Rutina fuerza', '', '', '', '', 'Mesociclo', '', 'Microciclo (semana)', '', '']
+        row2 = ['Dia', 'Ejercicio', 'Series', 'Metodo', 'TEMPO', 'Tiempo de descanso',
+                'Repeticiones semana anterior', 'Repeticiones', 'Peso utilizado', 'RIR', 'Anotaciones']
+        ws.update('A1:K2', [row1, row2])
 
         sheet_id = ws._properties.get('sheetId')
         requests = []
 
-        # Merges to approximate layout
-        # Merge A1:A2 (Fecha)
+        # Merges (approximate the screenshot)
+        # A1:A2 = Fecha
         requests.append({'mergeCells': {'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 0, 'endColumnIndex': 1}, 'mergeType': 'MERGE_ALL'}})
-        # Merge B1:E1 for Rutina
-        requests.append({'mergeCells': {'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 1, 'startColumnIndex': 1, 'endColumnIndex': 5}, 'mergeType': 'MERGE_ALL'}})
-        # Merge C1:C2 (Mesociclo) -> column index 2
-        requests.append({'mergeCells': {'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 2, 'endColumnIndex': 3}, 'mergeType': 'MERGE_ALL'}})
-        # Merge D1:D2 (Microciclo) -> column index 3
-        requests.append({'mergeCells': {'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 3, 'endColumnIndex': 4}, 'mergeType': 'MERGE_ALL'}})
+        # B1:F1 = Rutina fuerza
+        requests.append({'mergeCells': {'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 1, 'startColumnIndex': 1, 'endColumnIndex': 6}, 'mergeType': 'MERGE_ALL'}})
+        # G1:G2 = Mesociclo label
+        requests.append({'mergeCells': {'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 6, 'endColumnIndex': 7}, 'mergeType': 'MERGE_ALL'}})
+        # I1:I2 = Microciclo label
+        requests.append({'mergeCells': {'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 8, 'endColumnIndex': 9}, 'mergeType': 'MERGE_ALL'}})
 
         # Set column widths (approx)
-        widths = [120, 220, 100, 100, 200, 200, 90, 120, 80, 120, 120, 80, 80, 60, 260]
+        widths = [140, 240, 90, 120, 190, 190, 170, 120, 120, 80, 260]
         for idx, w in enumerate(widths):
             requests.append({'updateDimensionProperties': {
                 'range': {'sheetId': sheet_id, 'dimension': 'COLUMNS', 'startIndex': idx, 'endIndex': idx+1},
@@ -214,8 +203,22 @@ class GoogleSheetsClient:
 
         # Header formatting: grey background and bold for rows 1-2
         requests.append({'repeatCell': {
-            'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 0, 'endColumnIndex': 15},
-            'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}, 'horizontalAlignment': 'CENTER', 'textFormat': {'bold': True}}},
+            'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 0, 'endColumnIndex': 11},
+            'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.75, 'green': 0.75, 'blue': 0.75}, 'horizontalAlignment': 'CENTER', 'textFormat': {'bold': True}}},
+            'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'
+        }})
+
+        # Red background for "Repeticiones semana anterior" header cell (G2) like the screenshot
+        requests.append({'repeatCell': {
+            'range': {'sheetId': sheet_id, 'startRowIndex': 1, 'endRowIndex': 2, 'startColumnIndex': 6, 'endColumnIndex': 7},
+            'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.85, 'green': 0.2, 'blue': 0.2}, 'textFormat': {'bold': True}, 'horizontalAlignment': 'CENTER'}},
+            'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'
+        }})
+
+        # Blue band on the far right (K1:K2) like the screenshot edge
+        requests.append({'repeatCell': {
+            'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 2, 'startColumnIndex': 10, 'endColumnIndex': 11},
+            'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.1, 'green': 0.25, 'blue': 0.95}, 'textFormat': {'bold': True}, 'horizontalAlignment': 'CENTER'}},
             'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'
         }})
 
