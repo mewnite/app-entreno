@@ -4,6 +4,8 @@ from gspread.exceptions import APIError
 import os
 import time
 import random
+import json
+from utils import get_asset_path
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
@@ -15,10 +17,38 @@ class GoogleSheetsClient:
     def configure_from_service_account(self, creds_path):
         if not creds_path:
             raise ValueError('Ruta de credenciales no proporcionada')
-        if not os.path.exists(creds_path):
-            raise FileNotFoundError(f'No se encontró: {creds_path}')
-        creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
-        self.client = gspread.authorize(creds)
+        # Resolve the credential path (handles Android internal storage)
+        resolved_path = get_asset_path(creds_path)
+        if not os.path.exists(resolved_path):
+            raise FileNotFoundError(
+                f'No se encontraron credenciales en: {resolved_path}\n'
+                f'Ruta original: {creds_path}\n\n'
+                'En Android, copia service_account.json a la carpeta de la app '
+                'o usa "Configuración" para apuntar a la ruta correcta.'
+            )
+        try:
+            creds = Credentials.from_service_account_file(resolved_path, scopes=SCOPES)
+            self.client = gspread.authorize(creds)
+        except Exception as e:
+            err_str = str(e).lower()
+            if 'invalid_grant' in err_str or 'invalid jwt signature' in err_str:
+                raise RuntimeError(
+                    "Error de autenticación: 'Invalid JWT Signature'.\n\n"
+                    "Esto significa que el archivo de credenciales (service_account.json) no es válido.\n"
+                    "Posibles causas:\n"
+                    "1. El archivo no es un Service Account JSON de Google Cloud (podría ser un OAuth client ID).\n"
+                    "2. El archivo está corrupto o mal formado.\n"
+                    "3. La clave privada ('private_key') tiene un formato incorrecto (debe contener saltos de línea reales).\n"
+                    "4. El service account fue eliminado o desactivado en Google Cloud.\n\n"
+                    "Solución:\n"
+                    "- Descarga un nuevo service_account.json desde Google Cloud Console (IAM > Service Accounts).\n"
+                    "- Asegúrate de seleccionar 'JSON' y copia el archivo completo sin modificaciones.\n"
+                    "- Reemplaza el archivo en tu proyecto y reconstruye la APK.\n"
+                    f"Ruta usada: {resolved_path}\n"
+                    f"Error original: {e}"
+                ) from e
+            else:
+                raise
 
     def _open_or_create_spreadsheet(self, title):
         # Try to open; if fails, try to create. Implement simple retry/backoff for rate limits.

@@ -3,10 +3,41 @@ from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.metrics import dp
+from kivy.utils import platform
 from sheets import GoogleSheetsClient
 from ocr import parse_ocr_to_fields, extract_text_from_image
-from utils import Config
+from utils import Config, get_asset_path
 import os
+import logging
+import traceback
+
+# Configure logging for Android debugging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
+logger.info("Starting app initialization...")
+
+# Create a log file for Android debugging
+try:
+    if platform == 'android':
+        logger.info("Running on Android platform")
+        import android
+        log_path = os.path.join(android.storage_path(), 'gimroutine_debug.log')
+        logger.info(f"Log path: {log_path}")
+    else:
+        log_path = 'gimroutine_debug.log'
+        logger.info(f"Log path: {log_path}")
+
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setLevel(logging.DEBUG)
+    logging.getLogger().addHandler(file_handler)
+    logger.info("Logging configured successfully")
+except Exception as e:
+    print(f"Error configuring logging: {e}")
+    logger.error(f"Error configuring logging: {e}")
 
 KV = """
 ScreenManager:
@@ -419,6 +450,11 @@ class SettingsScreen(Screen):
     def on_pre_enter(self):
         cfg = Config.load()
         self.creds = cfg.get('creds_path','')
+        # Auto-detect service account in app assets on Android
+        if not self.creds:
+            auto_path = get_asset_path('service_account.json')
+            if os.path.exists(auto_path):
+                self.creds = auto_path
         self.sheet = cfg.get('sheet_name','Entrenamientos')
 
     def save(self):
@@ -444,9 +480,54 @@ class SettingsScreen(Screen):
 
 class GymApp(App):
     def build(self):
-        # Load the KV string and return the root widget
-        return Builder.load_string(KV)
+        try:
+            logger.info("Starting GymApp build...")
+            # Load the KV string and return the root widget
+            root = Builder.load_string(KV)
+            logger.info("KV loaded successfully")
+            return root
+        except Exception as e:
+            logger.error(f"Error in build(): {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
+
+    def on_start(self):
+        try:
+            logger.info("App started successfully")
+        except Exception as e:
+            logger.error(f"Error in on_start(): {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
+
+    def on_pause(self):
+        try:
+            logger.info("App paused")
+            return True
+        except Exception as e:
+            logger.error(f"Error in on_pause(): {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return True
+
+    def on_resume(self):
+        try:
+            logger.info("App resumed")
+        except Exception as e:
+            logger.error(f"Error in on_resume(): {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+def main():
+    try:
+        logger.info("Starting main() function")
+        app = GymApp()
+        logger.info("GymApp instance created")
+        app.run()
+    except Exception as e:
+        logger.error(f"Critical error in main(): {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Re-raise to ensure the crash is visible
+        raise
 
 
 if __name__ == '__main__':
-    GymApp().run()
+    main()
