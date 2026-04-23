@@ -11,4 +11,3 @@ buildozer.spec
 *.keystore
 *.iml
 .idea/
-data/presplash.png

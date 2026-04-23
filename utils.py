@@ -3,6 +3,22 @@ import os
 import logging
 
 
+def get_app_storage_dir():
+    """Return a writable config/data directory on every platform."""
+    try:
+        from kivy.utils import platform
+        if platform == 'android':
+            from android.storage import app_storage_path
+            path = app_storage_path()
+        else:
+            path = os.path.dirname(os.path.abspath(__file__))
+    except Exception:
+        path = os.path.dirname(os.path.abspath(__file__))
+
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 def get_asset_path(filename, debug=False):
     """Get the absolute path to an asset file, handling Android packaging.
 
@@ -33,26 +49,22 @@ def get_asset_path(filename, debug=False):
             logger.debug(f"Found file in script directory: {script_path}")
         return script_path
 
-    # On Android, files from android.add_src are in the private internal storage.
-    # Environment variable ANDROID_PRIVATE points to /data/data/<package>/files
+    # On Android, bundled files and user-provided files may live in app storage.
     try:
         from kivy.utils import platform
         if platform == 'android':
-            android_private = os.environ.get('ANDROID_PRIVATE')
-            if android_private:
-                internal_path = os.path.join(android_private, filename)
-                if os.path.exists(internal_path):
-                    if debug:
-                        logger.debug(f"Found file in Android internal storage: {internal_path}")
-                    return internal_path
-            # Also try the directory of this module (sometimes works)
-            main_path = os.path.join(os.path.dirname(__file__), filename)
-            if os.path.exists(main_path):
+            app_path = os.path.join(get_app_storage_dir(), filename)
+            if os.path.exists(app_path):
                 if debug:
-                    logger.debug(f"Found file in module directory: {main_path}")
-                return main_path
+                    logger.debug(f"Found file in Android app storage: {app_path}")
+                return app_path
+            module_path = os.path.join(os.path.dirname(__file__), filename)
+            if os.path.exists(module_path):
+                if debug:
+                    logger.debug(f"Found file in module directory: {module_path}")
+                return module_path
             if debug:
-                logger.debug(f"Android private storage: {android_private}")
+                logger.debug(f"Android app storage dir: {get_app_storage_dir()}")
     except Exception as e:
         if debug:
             logger.debug(f"Error checking Android paths: {e}")
@@ -64,7 +76,7 @@ def get_asset_path(filename, debug=False):
 
 
 class Config:
-    CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+    CONFIG_FILE = os.path.join(get_app_storage_dir(), 'config.json')
 
     @classmethod
     def load(cls):

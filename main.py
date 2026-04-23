@@ -19,19 +19,16 @@ if platform == 'android':
         os.environ['KIVY_NO_FILELOG'] = '1'
 
         try:
-            from android.storage import primary_external_storage_path
+            from android.storage import app_storage_path
 
-            base_path = primary_external_storage_path()
-            kivy_home = os.path.join(
-                base_path,
-                'Android', 'data', 'org.example.gimroutine', 'kivy'
-            )
+            base_path = app_storage_path()
+            kivy_home = os.path.join(base_path, '.kivy')
             os.makedirs(kivy_home, exist_ok=True)
             os.environ['KIVY_HOME'] = kivy_home
             logger.info(f"Set KIVY_HOME to: {kivy_home}")
 
         except Exception as e:
-            logger.warning(f"Could not set external KIVY_HOME: {e}")
+            logger.warning(f"Could not set internal KIVY_HOME: {e}")
 
         try:
             kivy_home = os.environ.get('KIVY_HOME', os.path.expanduser('~/.kivy'))
@@ -51,9 +48,15 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.metrics import dp
 
-from sheets import GoogleSheetsClient
 from ocr import parse_ocr_to_fields, extract_text_from_image
 from utils import Config, get_asset_path
+
+
+def create_sheets_client():
+    """Import Google Sheets dependencies lazily so Android can boot even if they fail."""
+    from sheets import GoogleSheetsClient
+
+    return GoogleSheetsClient()
 
 # Logging a archivo, usando ruta segura
 try:
@@ -300,7 +303,7 @@ class ManualScreen(Screen):
     def send_to_sheets(self):
         # kept for compatibility (sends current single exercise)
         config = Config.load()
-        client = GoogleSheetsClient()
+        client = create_sheets_client()
         try:
             client.configure_from_service_account(config.get('creds_path'))
             sheet_name = config.get('sheet_name', 'Entrenamientos')
@@ -372,7 +375,7 @@ class ManualScreen(Screen):
     def finalize_training(self):
         from utils import TrainingSession
         config = Config.load()
-        client = GoogleSheetsClient()
+        client = create_sheets_client()
         try:
             client.configure_from_service_account(config.get('creds_path'))
             sheet_name = config.get('sheet_name', 'Entrenamientos')
@@ -506,8 +509,8 @@ class SettingsScreen(Screen):
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         cfg = Config.load()
-        client = GoogleSheetsClient()
         try:
+            client = create_sheets_client()
             client.configure_from_service_account(cfg.get('creds_path'))
             Popup(title='Conexión OK', content=Label(text='Conexión establecida.'), size_hint=(0.6,0.3)).open()
         except Exception as e:
@@ -530,41 +533,13 @@ class GymApp(App):
     def on_start(self):
         try:
             logger.info("App started successfully")
-
-            # Request storage permissions on Android
             if platform == 'android':
-                try:
-                    from android.permissions import request_permissions, Permission
-                    from android import api_version
-
-                    logger.info(f"Android API version: {api_version}")
-
-                    # Request permissions needed for the app
-                    permissions = [Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE]
-                    if api_version >= 30:  # Android 11+
-                        permissions.append(Permission.MANAGE_EXTERNAL_STORAGE)
-
-                    logger.info(f"Requesting permissions: {permissions}")
-                    request_permissions(permissions, self.on_permissions_granted)
-                except Exception as e:
-                    logger.warning(f"Could not request permissions: {e}")
+                logger.info("Running on Android with internal app storage only")
 
         except Exception as e:
             logger.error(f"Error in on_start(): {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
-
-    def on_permissions_granted(self, permissions, granted):
-        """Callback when permissions are granted or denied"""
-        try:
-            logger.info(f"Permissions result: {permissions} -> {granted}")
-            if all(granted):
-                logger.info("All permissions granted successfully")
-            else:
-                denied = [p for p, g in zip(permissions, granted) if not g]
-                logger.warning(f"Some permissions denied: {denied}")
-        except Exception as e:
-            logger.error(f"Error in on_permissions_granted: {e}")
 
     def on_pause(self):
         try:
