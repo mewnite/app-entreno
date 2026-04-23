@@ -1,71 +1,76 @@
+import os
+import logging
+import traceback
+
+from kivy.utils import platform
+
+# Logger primero, siempre
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+logger.info("Starting app initialization...")
+
+# Configuración segura de Android
+if platform == 'android':
+    try:
+        os.environ['KIVY_NO_ARGS'] = '1'
+        os.environ['KIVY_NO_FILELOG'] = '1'
+
+        try:
+            from android.storage import primary_external_storage_path
+
+            base_path = primary_external_storage_path()
+            kivy_home = os.path.join(
+                base_path,
+                'Android', 'data', 'org.example.gimroutine', 'kivy'
+            )
+            os.makedirs(kivy_home, exist_ok=True)
+            os.environ['KIVY_HOME'] = kivy_home
+            logger.info(f"Set KIVY_HOME to: {kivy_home}")
+
+        except Exception as e:
+            logger.warning(f"Could not set external KIVY_HOME: {e}")
+
+        try:
+            kivy_home = os.environ.get('KIVY_HOME', os.path.expanduser('~/.kivy'))
+            kivy_icon_dir = os.path.join(kivy_home, 'icon')
+            os.makedirs(kivy_icon_dir, exist_ok=True)
+            logger.info(f"Created Kivy data directory: {kivy_icon_dir}")
+        except Exception as e:
+            logger.warning(f"Could not create Kivy data directory: {e}")
+
+    except Exception as e:
+        logger.warning(f"Error configuring Kivy for Android: {e}")
+
+# Imports del proyecto, después de configurar lo anterior
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.metrics import dp
-from kivy.utils import platform
+
 from sheets import GoogleSheetsClient
 from ocr import parse_ocr_to_fields, extract_text_from_image
 from utils import Config, get_asset_path
-import os
-import logging
-import traceback
 
-# Configure Kivy for Android to avoid permission issues
-if platform == 'android':
-    try:
-        # Disable icon copying that causes permission issues
-        os.environ['KIVY_NO_FILELOG'] = '1'  # Disable file logging initially
-        os.environ['KIVY_NO_ARGS'] = '1'     # Disable argument processing
-
-        # Try to set KIVY_HOME to external storage
-        try:
-            from android.storage import primary_external_storage_path
-            kivy_home = os.path.join(primary_external_storage_path(), 'Android', 'data', 'org.example.gimroutine', 'kivy')
-            os.makedirs(kivy_home, exist_ok=True)
-            os.environ['KIVY_HOME'] = kivy_home
-            logger.info(f"Set KIVY_HOME to external: {kivy_home}")
-        except Exception as e:
-            logger.warning(f"Could not set external KIVY_HOME: {e}")
-
-        # Create .kivy directory structure manually to avoid permission issues
-        try:
-            kivy_data_dir = os.path.join(os.environ.get('KIVY_HOME', os.path.expanduser('~/.kivy')), 'icon')
-            os.makedirs(kivy_data_dir, exist_ok=True)
-            logger.info(f"Created Kivy data directory: {kivy_data_dir}")
-        except Exception as e:
-            logger.warning(f"Could not create Kivy data directory: {e}")
-
-        # Re-enable logging after Kivy initialization
-        os.environ.pop('KIVY_NO_FILELOG', None)
-
-    except Exception as e:
-        logger.warning(f"Error configuring Kivy for Android: {e}")
-
-# Configure logging for Android debugging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-logger = logging.getLogger(__name__)
-logger.info("Starting app initialization...")
-
-# Create a log file for Android debugging
+# Logging a archivo, usando ruta segura
 try:
     if platform == 'android':
-        logger.info("Running on Android platform")
-        import android
-        log_path = os.path.join(android.storage_path(), 'gimroutine_debug.log')
-        logger.info(f"Log path: {log_path}")
+        try:
+            from android.storage import app_storage_path
+            log_path = os.path.join(app_storage_path(), 'gimroutine_debug.log')
+        except Exception:
+            log_path = '/sdcard/gimroutine_debug.log'
     else:
         log_path = 'gimroutine_debug.log'
-        logger.info(f"Log path: {log_path}")
 
     file_handler = logging.FileHandler(log_path)
     file_handler.setLevel(logging.DEBUG)
     logging.getLogger().addHandler(file_handler)
-    logger.info("Logging configured successfully")
+    logger.info(f"Logging configured successfully at: {log_path}")
+
 except Exception as e:
     print(f"Error configuring logging: {e}")
     logger.error(f"Error configuring logging: {e}")
