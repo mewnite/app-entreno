@@ -5,7 +5,7 @@ import os
 import time
 import random
 import json
-from utils import get_asset_path
+from utils import get_asset_path, read_android_content_uri
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
@@ -19,6 +19,20 @@ class GoogleSheetsClient:
             raise ValueError('Ruta de credenciales no proporcionada')
         # Resolve the credential path (handles Android internal storage)
         resolved_path = get_asset_path(creds_path)
+        if resolved_path.startswith('content://'):
+            try:
+                content = read_android_content_uri(resolved_path)
+                creds_info = json.loads(content)
+                creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+                self.client = gspread.authorize(creds)
+                return
+            except Exception as e:
+                raise RuntimeError(
+                    f'No se pudieron leer credenciales desde el selector de Android.\n'
+                    f'Ruta usada: {resolved_path}\n'
+                    f'Error original: {e}'
+                ) from e
+
         if not os.path.exists(resolved_path):
             raise FileNotFoundError(
                 f'No se encontraron credenciales en: {resolved_path}\n'

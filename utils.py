@@ -139,6 +139,55 @@ def ensure_any_asset_in_app_storage(candidates, target_name=None, debug=False):
         return source_path
 
 
+def read_android_content_uri(uri: str) -> str:
+    """Read text content from an Android content:// URI."""
+    from jnius import autoclass
+
+    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+    Uri = autoclass('android.net.Uri')
+    InputStreamReader = autoclass('java.io.InputStreamReader')
+    BufferedReader = autoclass('java.io.BufferedReader')
+    StringBuilder = autoclass('java.lang.StringBuilder')
+
+    activity = PythonActivity.mActivity
+    resolver = activity.getContentResolver()
+    input_stream = resolver.openInputStream(Uri.parse(uri))
+    if input_stream is None:
+        raise FileNotFoundError(f'No se pudo abrir el contenido: {uri}')
+
+    reader = BufferedReader(InputStreamReader(input_stream, 'UTF-8'))
+    builder = StringBuilder()
+    line = reader.readLine()
+    first = True
+    while line is not None:
+        if not first:
+            builder.append('\n')
+        builder.append(line)
+        first = False
+        line = reader.readLine()
+
+    reader.close()
+    input_stream.close()
+    return str(builder.toString())
+
+
+def import_json_to_app_storage(source: str, target_name='service_account.json') -> str:
+    """Copy a selected JSON file into app storage and return its stable path."""
+    target_path = os.path.join(get_app_storage_dir(), target_name)
+
+    if source.startswith('content://'):
+        content = read_android_content_uri(source)
+        with open(target_path, 'w', encoding='utf-8') as file_obj:
+            file_obj.write(content)
+        return target_path
+
+    if os.path.exists(source):
+        shutil.copyfile(source, target_path)
+        return target_path
+
+    raise FileNotFoundError(source)
+
+
 class Config:
     CONFIG_FILE = os.path.join(get_app_storage_dir(), 'config.json')
 

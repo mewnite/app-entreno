@@ -49,7 +49,13 @@ from kivy.properties import ObjectProperty, StringProperty
 from kivy.metrics import dp
 
 from ocr import parse_ocr_to_fields, extract_text_from_image
-from utils import Config, ensure_any_asset_in_app_storage, find_existing_asset, get_asset_path
+from utils import (
+    Config,
+    ensure_any_asset_in_app_storage,
+    find_existing_asset,
+    get_asset_path,
+    import_json_to_app_storage,
+)
 
 
 GOOGLE_CREDS_CANDIDATES = [
@@ -445,6 +451,10 @@ ScreenManager:
                     height: self.minimum_height
                     spacing: dp(8)
                     AppButton:
+                        text: 'Buscar JSON'
+                        background_color: 0.55, 0.43, 0.20, 1
+                        on_release: root.browse_credentials()
+                    AppButton:
                         text: 'Guardar'
                         on_release: root.save()
                     AppButton:
@@ -676,16 +686,63 @@ class SettingsScreen(Screen):
         Config.save(cfg)
         Popup(title='Guardado', content=Label(text='Configuración guardada.'), size_hint=(0.6,0.3)).open()
 
-    def test_connection(self):
+    def browse_credentials(self):
+        try:
+            if platform == 'android':
+                from plyer import filechooser
+
+                filechooser.open_file(
+                    on_selection=self._handle_credentials_selection,
+                    filters=[('JSON', '*.json')],
+                    multiple=False,
+                )
+                return
+
+            from kivy.uix.filechooser import FileChooserIconView
+            from kivy.uix.popup import Popup
+
+            chooser = FileChooserIconView(filters=['*.json'])
+            popup = Popup(title='Seleccionar credenciales JSON', content=chooser, size_hint=(0.9, 0.9))
+
+            def on_submit(instance, selection, touch):
+                self._handle_credentials_selection(selection)
+                popup.dismiss()
+
+            chooser.bind(on_submit=on_submit)
+            popup.open()
+        except Exception as e:
+            self._show_settings_message('Error', str(e))
+
+    def _handle_credentials_selection(self, selection):
+        if not selection:
+            return
+
+        try:
+            selected = selection[0]
+            stable_path = import_json_to_app_storage(selected)
+            self.ids.creds_path.text = stable_path
+
+            cfg = Config.load()
+            cfg['creds_path'] = stable_path
+            Config.save(cfg)
+            self._show_settings_message('Credenciales', 'Archivo JSON importado correctamente.')
+        except Exception as e:
+            self._show_settings_message('Error', str(e))
+
+    def _show_settings_message(self, title, message):
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
+
+        Popup(title=title, content=Label(text=message), size_hint=(0.8, 0.4)).open()
+
+    def test_connection(self):
         cfg = Config.load()
         try:
             client = create_sheets_client()
             client.configure_from_service_account(cfg.get('creds_path'))
-            Popup(title='Conexión OK', content=Label(text='Conexión establecida.'), size_hint=(0.6,0.3)).open()
+            self._show_settings_message('Conexión OK', 'Conexión establecida.')
         except Exception as e:
-            Popup(title='Error', content=Label(text=str(e)), size_hint=(0.8,0.4)).open()
+            self._show_settings_message('Error', str(e))
 
 
 class GymApp(App):
