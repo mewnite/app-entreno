@@ -28,10 +28,16 @@ android.api = 33
 android.minapi = 21
 android.sdk = 33
 android.ndk = 25
-android.permissions = INTERNET, CAMERA
+android.permissions = INTERNET, CAMERA, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 android.arch = arm64-v8a
 android.allow_backup = True
 android.backup_rules = backup_rules.xml
+android.meta_data =
+android.target_sdk_version = 33
+android.manifest_orientation = portrait
+android.gradle_dependencies = com.android.support:support-v4:28.0.0
+p4a.source_dir = .
+p4a.local_recipes = ./p4a-recipes
 
 [buildozer:extra]
 # Include your service account JSON if you want to bundle it (or put it on device manually)

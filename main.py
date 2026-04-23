@@ -11,6 +11,37 @@ import os
 import logging
 import traceback
 
+# Configure Kivy for Android to avoid permission issues
+if platform == 'android':
+    try:
+        # Disable icon copying that causes permission issues
+        os.environ['KIVY_NO_FILELOG'] = '1'  # Disable file logging initially
+        os.environ['KIVY_NO_ARGS'] = '1'     # Disable argument processing
+
+        # Try to set KIVY_HOME to external storage
+        try:
+            from android.storage import primary_external_storage_path
+            kivy_home = os.path.join(primary_external_storage_path(), 'Android', 'data', 'org.example.gimroutine', 'kivy')
+            os.makedirs(kivy_home, exist_ok=True)
+            os.environ['KIVY_HOME'] = kivy_home
+            logger.info(f"Set KIVY_HOME to external: {kivy_home}")
+        except Exception as e:
+            logger.warning(f"Could not set external KIVY_HOME: {e}")
+
+        # Create .kivy directory structure manually to avoid permission issues
+        try:
+            kivy_data_dir = os.path.join(os.environ.get('KIVY_HOME', os.path.expanduser('~/.kivy')), 'icon')
+            os.makedirs(kivy_data_dir, exist_ok=True)
+            logger.info(f"Created Kivy data directory: {kivy_data_dir}")
+        except Exception as e:
+            logger.warning(f"Could not create Kivy data directory: {e}")
+
+        # Re-enable logging after Kivy initialization
+        os.environ.pop('KIVY_NO_FILELOG', None)
+
+    except Exception as e:
+        logger.warning(f"Error configuring Kivy for Android: {e}")
+
 # Configure logging for Android debugging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -494,10 +525,41 @@ class GymApp(App):
     def on_start(self):
         try:
             logger.info("App started successfully")
+
+            # Request storage permissions on Android
+            if platform == 'android':
+                try:
+                    from android.permissions import request_permissions, Permission
+                    from android import api_version
+
+                    logger.info(f"Android API version: {api_version}")
+
+                    # Request permissions needed for the app
+                    permissions = [Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE]
+                    if api_version >= 30:  # Android 11+
+                        permissions.append(Permission.MANAGE_EXTERNAL_STORAGE)
+
+                    logger.info(f"Requesting permissions: {permissions}")
+                    request_permissions(permissions, self.on_permissions_granted)
+                except Exception as e:
+                    logger.warning(f"Could not request permissions: {e}")
+
         except Exception as e:
             logger.error(f"Error in on_start(): {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
+
+    def on_permissions_granted(self, permissions, granted):
+        """Callback when permissions are granted or denied"""
+        try:
+            logger.info(f"Permissions result: {permissions} -> {granted}")
+            if all(granted):
+                logger.info("All permissions granted successfully")
+            else:
+                denied = [p for p, g in zip(permissions, granted) if not g]
+                logger.warning(f"Some permissions denied: {denied}")
+        except Exception as e:
+            logger.error(f"Error in on_permissions_granted: {e}")
 
     def on_pause(self):
         try:
