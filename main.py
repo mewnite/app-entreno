@@ -664,6 +664,7 @@ class OCRScreen(Screen):
 
 
 class SettingsScreen(Screen):
+    ANDROID_JSON_PICKER_REQUEST = 9217
     creds = StringProperty('')
     sheet = StringProperty('Entrenamientos')
 
@@ -689,13 +690,7 @@ class SettingsScreen(Screen):
     def browse_credentials(self):
         try:
             if platform == 'android':
-                from plyer import filechooser
-
-                filechooser.open_file(
-                    on_selection=self._handle_credentials_selection,
-                    filters=[('JSON', '*.json')],
-                    multiple=False,
-                )
+                self._browse_credentials_android()
                 return
 
             from kivy.uix.filechooser import FileChooserIconView
@@ -712,6 +707,58 @@ class SettingsScreen(Screen):
             popup.open()
         except Exception as e:
             self._show_settings_message('Error', str(e))
+
+    def _browse_credentials_android(self):
+        from android import activity
+        from jnius import autoclass
+
+        Intent = autoclass('android.content.Intent')
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+        chooser_intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        chooser_intent.addCategory(Intent.CATEGORY_OPENABLE)
+        chooser_intent.setType('application/json')
+        chooser_intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        chooser_intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+
+        activity.unbind(on_activity_result=self._on_android_activity_result)
+        activity.bind(on_activity_result=self._on_android_activity_result)
+        PythonActivity.mActivity.startActivityForResult(
+            chooser_intent,
+            self.ANDROID_JSON_PICKER_REQUEST,
+        )
+
+    def _on_android_activity_result(self, request_code, result_code, intent):
+        if request_code != self.ANDROID_JSON_PICKER_REQUEST:
+            return
+
+        from android import activity
+        from jnius import autoclass
+
+        activity.unbind(on_activity_result=self._on_android_activity_result)
+
+        Activity = autoclass('android.app.Activity')
+        Intent = autoclass('android.content.Intent')
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+        if result_code != Activity.RESULT_OK or intent is None:
+            return
+
+        uri = intent.getData()
+        if uri is None:
+            self._show_settings_message('Error', 'Android no devolvió ningún archivo.')
+            return
+
+        try:
+            flags = intent.getFlags() & (
+                Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            PythonActivity.mActivity.getContentResolver().takePersistableUriPermission(uri, flags)
+        except Exception:
+            pass
+
+        self._handle_credentials_selection([str(uri.toString())])
 
     def _handle_credentials_selection(self, selection):
         if not selection:
