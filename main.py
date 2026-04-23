@@ -49,7 +49,13 @@ from kivy.properties import ObjectProperty, StringProperty
 from kivy.metrics import dp
 
 from ocr import parse_ocr_to_fields, extract_text_from_image
-from utils import Config, get_asset_path
+from utils import Config, ensure_any_asset_in_app_storage, find_existing_asset, get_asset_path
+
+
+GOOGLE_CREDS_CANDIDATES = [
+    'service_account.json',
+    'gimrutine-493121-84a3decf76ac.json',
+]
 
 
 def create_sheets_client():
@@ -57,6 +63,28 @@ def create_sheets_client():
     from sheets import GoogleSheetsClient
 
     return GoogleSheetsClient()
+
+
+def ensure_default_google_creds():
+    """Persist bundled credentials into a stable writable path and store it in config."""
+    cfg = Config.load()
+    current_path = cfg.get('creds_path', '').strip()
+    if current_path and os.path.exists(current_path):
+        return current_path
+
+    stable_path = ensure_any_asset_in_app_storage(
+        GOOGLE_CREDS_CANDIDATES,
+        target_name='service_account.json',
+        debug=True,
+    )
+    if os.path.exists(stable_path):
+        cfg['creds_path'] = stable_path
+        Config.save(cfg)
+        logger.info(f"Default service account configured at: {stable_path}")
+        return stable_path
+
+    logger.warning("No bundled Google credentials JSON was found in assets or app storage")
+    return current_path
 
 # Logging a archivo, usando ruta segura
 try:
@@ -79,6 +107,50 @@ except Exception as e:
     logger.error(f"Error configuring logging: {e}")
 
 KV = """
+<SectionCard@BoxLayout>:
+    orientation: 'vertical'
+    spacing: dp(8)
+    padding: dp(12)
+    size_hint_y: None
+    height: self.minimum_height
+    canvas.before:
+        Color:
+            rgba: 0.08, 0.11, 0.16, 0.95
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [18, 18, 18, 18]
+
+<SectionTitle@Label>:
+    size_hint_y: None
+    height: dp(28)
+    bold: True
+    color: 0.93, 0.95, 0.98, 1
+    font_size: '18sp'
+    halign: 'left'
+    text_size: self.size
+
+<FieldInput@TextInput>:
+    size_hint_y: None
+    height: dp(44)
+    multiline: False
+    padding: [dp(12), dp(12), dp(12), dp(12)]
+    background_normal: ''
+    background_active: ''
+    background_color: 0.14, 0.18, 0.25, 1
+    foreground_color: 0.95, 0.97, 1, 1
+    hint_text_color: 0.65, 0.72, 0.82, 1
+    cursor_color: 0.36, 0.78, 0.69, 1
+
+<AppButton@Button>:
+    size_hint_y: None
+    height: dp(46)
+    bold: True
+    background_normal: ''
+    background_down: ''
+    background_color: 0.18, 0.55, 0.49, 1
+    color: 1, 1, 1, 1
+
 ScreenManager:
     ManualScreen:
     OCRScreen:
@@ -103,153 +175,223 @@ ScreenManager:
     rir_default: rir_default
     BoxLayout:
         orientation: 'vertical'
-        spacing: dp(8)
-        padding: dp(8)
-        GridLayout:
-            cols:2
-            size_hint_y: None
-            height: dp(120)
-            spacing: dp(6)
-            TextInput:
-                id: fecha
-                hint_text: 'Fecha (YYYY-MM-DD)'
-                size_hint_x: 0.34
-            TextInput:
-                id: rutina
-                hint_text: 'Rutina (ej: Pierna fuerza)'
-                size_hint_x: 0.33
-            TextInput:
-                id: mesociclo
-                hint_text: 'Mesociclo'
-                size_hint_x: 0.165
-            TextInput:
-                id: microciclo
-                hint_text: 'Microciclo'
-                size_hint_x: 0.165
-            TextInput:
-                id: reps_default
-                hint_text: 'Reps por defecto'
-                size_hint_x: 0.165
-            TextInput:
-                id: rir_default
-                hint_text: 'RIR por defecto'
-                size_hint_x: 0.165
-        ScrollView:
-            size_hint_y: 0.45
+        spacing: dp(10)
+        padding: dp(10)
+        canvas.before:
+            Color:
+                rgba: 0.04, 0.06, 0.10, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        SectionCard:
+            Label:
+                text: 'GimRoutine'
+                size_hint_y: None
+                height: dp(34)
+                color: 0.96, 0.98, 1, 1
+                bold: True
+                font_size: '28sp'
+                halign: 'left'
+                text_size: self.size
+            Label:
+                text: 'Carga tu rutina y envia la sesion a Google Sheets sin salir del celu.'
+                size_hint_y: None
+                height: dp(42)
+                color: 0.70, 0.78, 0.88, 1
+                halign: 'left'
+                text_size: self.width, None
+        SectionCard:
+            SectionTitle:
+                text: 'Resumen'
+            GridLayout:
+                cols:2
+                size_hint_y: None
+                height: self.minimum_height
+                spacing: dp(8)
+                FieldInput:
+                    id: fecha
+                    hint_text: 'Fecha (YYYY-MM-DD)'
+                FieldInput:
+                    id: rutina
+                    hint_text: 'Rutina (ej: Pierna fuerza)'
+                FieldInput:
+                    id: mesociclo
+                    hint_text: 'Mesociclo'
+                FieldInput:
+                    id: microciclo
+                    hint_text: 'Microciclo'
+                FieldInput:
+                    id: reps_default
+                    hint_text: 'Reps por defecto'
+                FieldInput:
+                    id: rir_default
+                    hint_text: 'RIR por defecto'
+        SectionCard:
+            SectionTitle:
+                text: 'Ejercicio'
             GridLayout:
                 cols:1
                 size_hint_y: None
                 height: self.minimum_height
-                spacing: dp(6)
-                TextInput:
+                spacing: dp(8)
+                FieldInput:
                     id: ejercicio
                     hint_text: 'Ejercicio'
-                    size_hint_y: None
-                    height: dp(40)
-                TextInput:
+                FieldInput:
                     id: series
                     hint_text: 'Series'
-                    size_hint_y: None
-                    height: dp(40)
-                TextInput:
+                FieldInput:
                     id: metodo
-                    hint_text: 'Método'
-                    size_hint_y: None
-                    height: dp(40)
-                TextInput:
+                    hint_text: 'Metodo'
+                FieldInput:
                     id: tiempo
-                    hint_text: 'Tiempo'
-                    size_hint_y: None
-                    height: dp(40)
-                TextInput:
+                    hint_text: 'Tiempo / tempo'
+                FieldInput:
                     id: reps_prev
                     hint_text: 'Repeticiones semana anterior'
-                    size_hint_y: None
-                    height: dp(40)
-                TextInput:
+                FieldInput:
                     id: reps
                     hint_text: 'Repeticiones actuales'
-                    size_hint_y: None
-                    height: dp(40)
-                TextInput:
+                FieldInput:
                     id: peso
                     hint_text: 'Peso utilizado'
-                    size_hint_y: None
-                    height: dp(40)
-                TextInput:
+                FieldInput:
                     id: rir
                     hint_text: 'RIR'
-                    size_hint_y: None
-                    height: dp(40)
                 TextInput:
                     id: anotaciones
                     hint_text: 'Anotaciones'
                     size_hint_y: None
-                    height: dp(120)
-        BoxLayout:
-            orientation: 'horizontal'
-            size_hint_y: None
-            height: dp(48)
-            spacing: dp(6)
-            Button:
-                text: 'Agregar ejercicio'
-                on_release: root.add_exercise()
-            Button:
-                text: 'Finalizar entrenamiento'
-                on_release: root.finalize_training()
-            Button:
-                text: 'Limpiar sesión'
-                on_release: root.clear_session()
-            Button:
-                text: 'OCR'
-                on_release: app.root.current = 'ocr'
-            Button:
-                text: 'Configuración'
-                on_release: app.root.current = 'settings'
-        Label:
-            text: 'Ejercicios en la sesión:'
-            size_hint_y: None
-            height: dp(24)
+                    height: dp(110)
+                    padding: [dp(12), dp(12), dp(12), dp(12)]
+                    background_normal: ''
+                    background_active: ''
+                    background_color: 0.14, 0.18, 0.25, 1
+                    foreground_color: 0.95, 0.97, 1, 1
+                    hint_text_color: 0.65, 0.72, 0.82, 1
+                    cursor_color: 0.36, 0.78, 0.69, 1
         ScrollView:
-            size_hint_y: 0.3
+            size_hint_y: 1
+            do_scroll_x: False
             GridLayout:
-                id: exercise_list
                 cols:1
                 size_hint_y: None
                 height: self.minimum_height
-                spacing: dp(6)
+                spacing: dp(10)
+                SectionCard:
+                    SectionTitle:
+                        text: 'Acciones'
+                    GridLayout:
+                        cols: 2
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(8)
+                        AppButton:
+                            text: 'Agregar ejercicio'
+                            on_release: root.add_exercise()
+                        AppButton:
+                            text: 'Finalizar entrenamiento'
+                            background_color: 0.83, 0.37, 0.25, 1
+                            on_release: root.finalize_training()
+                        AppButton:
+                            text: 'Limpiar sesion'
+                            background_color: 0.31, 0.36, 0.47, 1
+                            on_release: root.clear_session()
+                        AppButton:
+                            text: 'OCR'
+                            background_color: 0.20, 0.43, 0.78, 1
+                            on_release: app.root.current = 'ocr'
+                        AppButton:
+                            text: 'Configuracion'
+                            background_color: 0.55, 0.43, 0.20, 1
+                            on_release: app.root.current = 'settings'
+                SectionCard:
+                    SectionTitle:
+                        text: 'Sesion actual'
+                    Label:
+                        text: 'Ejercicios cargados'
+                        size_hint_y: None
+                        height: dp(24)
+                        color: 0.70, 0.78, 0.88, 1
+                        halign: 'left'
+                        text_size: self.size
+                    ScrollView:
+                        size_hint_y: None
+                        height: dp(230)
+                        do_scroll_x: False
+                        GridLayout:
+                            id: exercise_list
+                            cols:1
+                            size_hint_y: None
+                            height: self.minimum_height
+                            spacing: dp(6)
 
 <OCRScreen>:
     name: 'ocr'
     image_path: ''
     BoxLayout:
         orientation: 'vertical'
-        spacing: dp(6)
-        padding: dp(6)
-        BoxLayout:
+        spacing: dp(10)
+        padding: dp(10)
+        canvas.before:
+            Color:
+                rgba: 0.04, 0.06, 0.10, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        SectionCard:
+            SectionTitle:
+                text: 'OCR'
+            Label:
+                text: 'Importa una imagen, revisa el texto y mandalo directo al formulario.'
+                size_hint_y: None
+                height: dp(42)
+                color: 0.70, 0.78, 0.88, 1
+                halign: 'left'
+                text_size: self.width, None
+            GridLayout:
+                cols: 1
+                size_hint_y: None
+                height: self.minimum_height
+                spacing: dp(8)
+                AppButton:
+                    text: 'Tomar foto (Camera)'
+                    background_color: 0.20, 0.43, 0.78, 1
+                    on_release: root.capture_camera()
+                AppButton:
+                    text: 'Seleccionar imagen'
+                    on_release: root.open_filechooser()
+                AppButton:
+                    text: 'Mapear a campos'
+                    background_color: 0.55, 0.43, 0.20, 1
+                    on_release: root.map_text_to_fields()
+        SectionCard:
+            SectionTitle:
+                text: 'Texto detectado'
+            TextInput:
+                id: ocr_text
+                text: root.ocr_text
+                size_hint_y: None
+                height: dp(320)
+                padding: [dp(12), dp(12), dp(12), dp(12)]
+                background_normal: ''
+                background_active: ''
+                background_color: 0.14, 0.18, 0.25, 1
+                foreground_color: 0.95, 0.97, 1, 1
+                hint_text_color: 0.65, 0.72, 0.82, 1
+                cursor_color: 0.36, 0.78, 0.69, 1
+        GridLayout:
+            cols: 2
             size_hint_y: None
-            height: dp(48)
-            Button:
-                text: 'Tomar foto (Camera)'
-                on_release: root.capture_camera()
-            Button:
-                text: 'Seleccionar imagen'
-                on_release: root.open_filechooser()
-            Button:
-                text: 'Mapear a campos'
-                on_release: root.map_text_to_fields()
-        TextInput:
-            id: ocr_text
-            text: root.ocr_text
-            size_hint_y: 0.6
-        BoxLayout:
-            size_hint_y: None
-            height: dp(48)
-            Button:
+            height: dp(46)
+            spacing: dp(8)
+            AppButton:
                 text: 'Enviar a Google Sheets'
+                background_color: 0.83, 0.37, 0.25, 1
                 on_release: root.send_mapped_to_sheets()
-            Button:
+            AppButton:
                 text: 'Volver'
+                background_color: 0.31, 0.36, 0.47, 1
                 on_release: app.root.current = 'manual'
 
 <SettingsScreen>:
@@ -258,31 +400,47 @@ ScreenManager:
     sheet_name: sheet_name
     BoxLayout:
         orientation: 'vertical'
-        padding: dp(8)
-        spacing: dp(6)
-        TextInput:
-            id: creds_path
-            hint_text: 'Ruta a service_account.json (credenciales)'
-            text: root.creds
+        padding: dp(10)
+        spacing: dp(10)
+        canvas.before:
+            Color:
+                rgba: 0.04, 0.06, 0.10, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        SectionCard:
+            SectionTitle:
+                text: 'Configuracion'
+            Label:
+                text: 'La app intenta encontrar las credenciales empaquetadas sola al iniciar.'
+                size_hint_y: None
+                height: dp(42)
+                color: 0.70, 0.78, 0.88, 1
+                halign: 'left'
+                text_size: self.width, None
+            FieldInput:
+                id: creds_path
+                hint_text: 'Ruta de credenciales JSON'
+                text: root.creds
+            FieldInput:
+                id: sheet_name
+                hint_text: 'Nombre del Spreadsheet'
+                text: root.sheet
+        GridLayout:
+            cols: 1
             size_hint_y: None
-            height: dp(40)
-        TextInput:
-            id: sheet_name
-            hint_text: 'Nombre del Spreadsheet'
-            text: root.sheet
-            size_hint_y: None
-            height: dp(40)
-        BoxLayout:
-            size_hint_y: None
-            height: dp(48)
-            Button:
+            height: self.minimum_height
+            spacing: dp(8)
+            AppButton:
                 text: 'Guardar'
                 on_release: root.save()
-            Button:
-                text: 'Probar conexión'
+            AppButton:
+                text: 'Probar conexion'
+                background_color: 0.20, 0.43, 0.78, 1
                 on_release: root.test_connection()
-            Button:
+            AppButton:
                 text: 'Volver'
+                background_color: 0.31, 0.36, 0.47, 1
                 on_release: app.root.current = 'manual'
 """
 
@@ -491,7 +649,7 @@ class SettingsScreen(Screen):
         self.creds = cfg.get('creds_path','')
         # Auto-detect service account in app assets on Android
         if not self.creds:
-            auto_path = get_asset_path('service_account.json')
+            auto_path = ensure_default_google_creds() or get_asset_path('service_account.json')
             if os.path.exists(auto_path):
                 self.creds = auto_path
         self.sheet = cfg.get('sheet_name','Entrenamientos')
@@ -533,6 +691,7 @@ class GymApp(App):
     def on_start(self):
         try:
             logger.info("App started successfully")
+            ensure_default_google_creds()
             if platform == 'android':
                 logger.info("Running on Android with internal app storage only")
 

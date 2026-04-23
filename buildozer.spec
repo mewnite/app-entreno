@@ -4,8 +4,9 @@ package.name = gimroutine
 package.domain = org.example
 source.dir = .
 source.include_exts = py,png,jpg,kv,json
+source.include_patterns = service_account.json,gimrutine-493121-84a3decf76ac.json,config.json,data/*
 version = 0.1
-requirements = python3,kivy==2.3.0,pillow,gspread,google-auth,requests,google-auth-httplib2
+requirements = python3,kivy==2.3.0,pillow,gspread,google-auth,requests,google-auth-httplib2,cryptography,cffi
 android.api = 33
 android.minapi = 21
 android.sdk = 33

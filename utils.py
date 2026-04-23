@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import shutil
 
 
 def get_app_storage_dir():
@@ -17,6 +18,18 @@ def get_app_storage_dir():
 
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def find_existing_asset(candidates, debug=False):
+    """Return the first candidate asset path that exists."""
+    logger = logging.getLogger(__name__)
+    for candidate in candidates:
+        resolved = get_asset_path(candidate, debug=debug)
+        if os.path.exists(resolved):
+            if debug:
+                logger.debug(f"Found candidate asset: {resolved}")
+            return resolved
+    return ''
 
 
 def get_asset_path(filename, debug=False):
@@ -73,6 +86,57 @@ def get_asset_path(filename, debug=False):
     if debug:
         logger.debug(f"File not found, returning original path: {filename}")
     return filename
+
+
+def ensure_asset_in_app_storage(filename, debug=False):
+    """Copy a bundled asset into writable app storage and return the stable path."""
+    logger = logging.getLogger(__name__)
+    storage_path = os.path.join(get_app_storage_dir(), os.path.basename(filename))
+    bundled_path = get_asset_path(filename, debug=debug)
+
+    if os.path.exists(storage_path):
+        if debug:
+            logger.debug(f"Using existing app storage asset: {storage_path}")
+        return storage_path
+
+    if os.path.exists(bundled_path):
+        try:
+            shutil.copyfile(bundled_path, storage_path)
+            if debug:
+                logger.debug(f"Copied bundled asset to app storage: {storage_path}")
+            return storage_path
+        except Exception as exc:
+            if debug:
+                logger.debug(f"Could not copy asset to app storage: {exc}")
+            return bundled_path
+
+    return storage_path
+
+
+def ensure_any_asset_in_app_storage(candidates, target_name=None, debug=False):
+    """Copy the first available bundled asset into app storage and return the stable path."""
+    logger = logging.getLogger(__name__)
+    source_path = find_existing_asset(candidates, debug=debug)
+    if not source_path:
+        return ''
+
+    final_name = target_name or os.path.basename(source_path)
+    storage_path = os.path.join(get_app_storage_dir(), final_name)
+
+    if os.path.exists(storage_path):
+        if debug:
+            logger.debug(f"Using existing app storage asset: {storage_path}")
+        return storage_path
+
+    try:
+        shutil.copyfile(source_path, storage_path)
+        if debug:
+            logger.debug(f"Copied asset to app storage: {storage_path}")
+        return storage_path
+    except Exception as exc:
+        if debug:
+            logger.debug(f"Could not copy asset to app storage: {exc}")
+        return source_path
 
 
 class Config:
