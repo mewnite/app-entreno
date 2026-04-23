@@ -175,109 +175,110 @@ ScreenManager:
     rir_default: rir_default
     BoxLayout:
         orientation: 'vertical'
-        spacing: dp(10)
-        padding: dp(10)
         canvas.before:
             Color:
                 rgba: 0.04, 0.06, 0.10, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
-        SectionCard:
-            Label:
-                text: 'GimRoutine'
-                size_hint_y: None
-                height: dp(34)
-                color: 0.96, 0.98, 1, 1
-                bold: True
-                font_size: '28sp'
-                halign: 'left'
-                text_size: self.size
-            Label:
-                text: 'Carga tu rutina y envia la sesion a Google Sheets sin salir del celu.'
-                size_hint_y: None
-                height: dp(42)
-                color: 0.70, 0.78, 0.88, 1
-                halign: 'left'
-                text_size: self.width, None
-        SectionCard:
-            SectionTitle:
-                text: 'Resumen'
-            GridLayout:
-                cols:2
-                size_hint_y: None
-                height: self.minimum_height
-                spacing: dp(8)
-                FieldInput:
-                    id: fecha
-                    hint_text: 'Fecha (YYYY-MM-DD)'
-                FieldInput:
-                    id: rutina
-                    hint_text: 'Rutina (ej: Pierna fuerza)'
-                FieldInput:
-                    id: mesociclo
-                    hint_text: 'Mesociclo'
-                FieldInput:
-                    id: microciclo
-                    hint_text: 'Microciclo'
-                FieldInput:
-                    id: reps_default
-                    hint_text: 'Reps por defecto'
-                FieldInput:
-                    id: rir_default
-                    hint_text: 'RIR por defecto'
-        SectionCard:
-            SectionTitle:
-                text: 'Ejercicio'
-            GridLayout:
-                cols:1
-                size_hint_y: None
-                height: self.minimum_height
-                spacing: dp(8)
-                FieldInput:
-                    id: ejercicio
-                    hint_text: 'Ejercicio'
-                FieldInput:
-                    id: series
-                    hint_text: 'Series'
-                FieldInput:
-                    id: metodo
-                    hint_text: 'Metodo'
-                FieldInput:
-                    id: tiempo
-                    hint_text: 'Tiempo / tempo'
-                FieldInput:
-                    id: reps_prev
-                    hint_text: 'Repeticiones semana anterior'
-                FieldInput:
-                    id: reps
-                    hint_text: 'Repeticiones actuales'
-                FieldInput:
-                    id: peso
-                    hint_text: 'Peso utilizado'
-                FieldInput:
-                    id: rir
-                    hint_text: 'RIR'
-                TextInput:
-                    id: anotaciones
-                    hint_text: 'Anotaciones'
-                    size_hint_y: None
-                    height: dp(110)
-                    padding: [dp(12), dp(12), dp(12), dp(12)]
-                    background_normal: ''
-                    background_active: ''
-                    background_color: 0.14, 0.18, 0.25, 1
-                    foreground_color: 0.95, 0.97, 1, 1
-                    hint_text_color: 0.65, 0.72, 0.82, 1
-                    cursor_color: 0.36, 0.78, 0.69, 1
         ScrollView:
-            size_hint_y: 1
             do_scroll_x: False
+            bar_width: dp(6)
             GridLayout:
-                cols:1
+                cols: 1
                 size_hint_y: None
                 height: self.minimum_height
+                padding: dp(10)
                 spacing: dp(10)
+                SectionCard:
+                    Label:
+                        text: 'GimRoutine'
+                        size_hint_y: None
+                        height: dp(34)
+                        color: 0.96, 0.98, 1, 1
+                        bold: True
+                        font_size: '28sp'
+                        halign: 'left'
+                        text_size: self.size
+                    Label:
+                        text: 'Carga tu rutina y envia la sesion a Google Sheets sin salir del celu.'
+                        size_hint_y: None
+                        height: self.texture_size[1] + dp(8)
+                        color: 0.70, 0.78, 0.88, 1
+                        halign: 'left'
+                        text_size: self.width, None
+                SectionCard:
+                    SectionTitle:
+                        text: 'Resumen'
+                    GridLayout:
+                        cols: 2
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(8)
+                        row_default_height: dp(44)
+                        row_force_default: True
+                        FieldInput:
+                            id: fecha
+                            hint_text: 'Fecha (YYYY-MM-DD)'
+                        FieldInput:
+                            id: rutina
+                            hint_text: 'Rutina (ej: Pierna fuerza)'
+                        FieldInput:
+                            id: mesociclo
+                            hint_text: 'Mesociclo'
+                        FieldInput:
+                            id: microciclo
+                            hint_text: 'Microciclo'
+                        FieldInput:
+                            id: reps_default
+                            hint_text: 'Reps por defecto'
+                        FieldInput:
+                            id: rir_default
+                            hint_text: 'RIR por defecto'
+                SectionCard:
+                    SectionTitle:
+                        text: 'Ejercicio'
+                    GridLayout:
+                        cols: 1
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(8)
+                        FieldInput:
+                            id: ejercicio
+                            hint_text: 'Ejercicio'
+                        FieldInput:
+                            id: series
+                            hint_text: 'Series'
+                        FieldInput:
+                            id: metodo
+                            hint_text: 'Metodo'
+                        FieldInput:
+                            id: tiempo
+                            hint_text: 'Tiempo / tempo'
+                        FieldInput:
+                            id: reps_prev
+                            hint_text: 'Repeticiones semana anterior'
+                        FieldInput:
+                            id: reps
+                            hint_text: 'Repeticiones actuales'
+                        FieldInput:
+                            id: peso
+                            hint_text: 'Peso utilizado'
+                        FieldInput:
+                            id: rir
+                            hint_text: 'RIR'
+                        TextInput:
+                            id: anotaciones
+                            hint_text: 'Anotaciones'
+                            size_hint_y: None
+                            height: dp(110)
+                            padding: [dp(12), dp(12), dp(12), dp(12)]
+                            background_normal: ''
+                            background_active: ''
+                            background_color: 0.14, 0.18, 0.25, 1
+                            foreground_color: 0.95, 0.97, 1, 1
+                            hint_text_color: 0.65, 0.72, 0.82, 1
+                            cursor_color: 0.36, 0.78, 0.69, 1
                 SectionCard:
                     SectionTitle:
                         text: 'Acciones'
@@ -286,6 +287,8 @@ ScreenManager:
                         size_hint_y: None
                         height: self.minimum_height
                         spacing: dp(8)
+                        row_default_height: dp(46)
+                        row_force_default: True
                         AppButton:
                             text: 'Agregar ejercicio'
                             on_release: root.add_exercise()
@@ -315,84 +318,87 @@ ScreenManager:
                         color: 0.70, 0.78, 0.88, 1
                         halign: 'left'
                         text_size: self.size
-                    ScrollView:
+                    GridLayout:
+                        id: exercise_list
+                        cols: 1
                         size_hint_y: None
-                        height: dp(230)
-                        do_scroll_x: False
-                        GridLayout:
-                            id: exercise_list
-                            cols:1
-                            size_hint_y: None
-                            height: self.minimum_height
-                            spacing: dp(6)
+                        height: self.minimum_height
+                        spacing: dp(6)
 
 <OCRScreen>:
     name: 'ocr'
     image_path: ''
     BoxLayout:
         orientation: 'vertical'
-        spacing: dp(10)
-        padding: dp(10)
         canvas.before:
             Color:
                 rgba: 0.04, 0.06, 0.10, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
-        SectionCard:
-            SectionTitle:
-                text: 'OCR'
-            Label:
-                text: 'Importa una imagen, revisa el texto y mandalo directo al formulario.'
-                size_hint_y: None
-                height: dp(42)
-                color: 0.70, 0.78, 0.88, 1
-                halign: 'left'
-                text_size: self.width, None
+        ScrollView:
+            do_scroll_x: False
+            bar_width: dp(6)
             GridLayout:
                 cols: 1
                 size_hint_y: None
                 height: self.minimum_height
-                spacing: dp(8)
-                AppButton:
-                    text: 'Tomar foto (Camera)'
-                    background_color: 0.20, 0.43, 0.78, 1
-                    on_release: root.capture_camera()
-                AppButton:
-                    text: 'Seleccionar imagen'
-                    on_release: root.open_filechooser()
-                AppButton:
-                    text: 'Mapear a campos'
-                    background_color: 0.55, 0.43, 0.20, 1
-                    on_release: root.map_text_to_fields()
-        SectionCard:
-            SectionTitle:
-                text: 'Texto detectado'
-            TextInput:
-                id: ocr_text
-                text: root.ocr_text
-                size_hint_y: None
-                height: dp(320)
-                padding: [dp(12), dp(12), dp(12), dp(12)]
-                background_normal: ''
-                background_active: ''
-                background_color: 0.14, 0.18, 0.25, 1
-                foreground_color: 0.95, 0.97, 1, 1
-                hint_text_color: 0.65, 0.72, 0.82, 1
-                cursor_color: 0.36, 0.78, 0.69, 1
-        GridLayout:
-            cols: 2
-            size_hint_y: None
-            height: dp(46)
-            spacing: dp(8)
-            AppButton:
-                text: 'Enviar a Google Sheets'
-                background_color: 0.83, 0.37, 0.25, 1
-                on_release: root.send_mapped_to_sheets()
-            AppButton:
-                text: 'Volver'
-                background_color: 0.31, 0.36, 0.47, 1
-                on_release: app.root.current = 'manual'
+                padding: dp(10)
+                spacing: dp(10)
+                SectionCard:
+                    SectionTitle:
+                        text: 'OCR'
+                    Label:
+                        text: 'Importa una imagen, revisa el texto y mandalo directo al formulario.'
+                        size_hint_y: None
+                        height: self.texture_size[1] + dp(8)
+                        color: 0.70, 0.78, 0.88, 1
+                        halign: 'left'
+                        text_size: self.width, None
+                    GridLayout:
+                        cols: 1
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(8)
+                        AppButton:
+                            text: 'Tomar foto (Camera)'
+                            background_color: 0.20, 0.43, 0.78, 1
+                            on_release: root.capture_camera()
+                        AppButton:
+                            text: 'Seleccionar imagen'
+                            on_release: root.open_filechooser()
+                        AppButton:
+                            text: 'Mapear a campos'
+                            background_color: 0.55, 0.43, 0.20, 1
+                            on_release: root.map_text_to_fields()
+                SectionCard:
+                    SectionTitle:
+                        text: 'Texto detectado'
+                    TextInput:
+                        id: ocr_text
+                        text: root.ocr_text
+                        size_hint_y: None
+                        height: dp(320)
+                        padding: [dp(12), dp(12), dp(12), dp(12)]
+                        background_normal: ''
+                        background_active: ''
+                        background_color: 0.14, 0.18, 0.25, 1
+                        foreground_color: 0.95, 0.97, 1, 1
+                        hint_text_color: 0.65, 0.72, 0.82, 1
+                        cursor_color: 0.36, 0.78, 0.69, 1
+                GridLayout:
+                    cols: 2
+                    size_hint_y: None
+                    height: dp(46)
+                    spacing: dp(8)
+                    AppButton:
+                        text: 'Enviar a Google Sheets'
+                        background_color: 0.83, 0.37, 0.25, 1
+                        on_release: root.send_mapped_to_sheets()
+                    AppButton:
+                        text: 'Volver'
+                        background_color: 0.31, 0.36, 0.47, 1
+                        on_release: app.root.current = 'manual'
 
 <SettingsScreen>:
     name: 'settings'
@@ -400,48 +406,55 @@ ScreenManager:
     sheet_name: sheet_name
     BoxLayout:
         orientation: 'vertical'
-        padding: dp(10)
-        spacing: dp(10)
         canvas.before:
             Color:
                 rgba: 0.04, 0.06, 0.10, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
-        SectionCard:
-            SectionTitle:
-                text: 'Configuracion'
-            Label:
-                text: 'La app intenta encontrar las credenciales empaquetadas sola al iniciar.'
+        ScrollView:
+            do_scroll_x: False
+            bar_width: dp(6)
+            GridLayout:
+                cols: 1
                 size_hint_y: None
-                height: dp(42)
-                color: 0.70, 0.78, 0.88, 1
-                halign: 'left'
-                text_size: self.width, None
-            FieldInput:
-                id: creds_path
-                hint_text: 'Ruta de credenciales JSON'
-                text: root.creds
-            FieldInput:
-                id: sheet_name
-                hint_text: 'Nombre del Spreadsheet'
-                text: root.sheet
-        GridLayout:
-            cols: 1
-            size_hint_y: None
-            height: self.minimum_height
-            spacing: dp(8)
-            AppButton:
-                text: 'Guardar'
-                on_release: root.save()
-            AppButton:
-                text: 'Probar conexion'
-                background_color: 0.20, 0.43, 0.78, 1
-                on_release: root.test_connection()
-            AppButton:
-                text: 'Volver'
-                background_color: 0.31, 0.36, 0.47, 1
-                on_release: app.root.current = 'manual'
+                height: self.minimum_height
+                padding: dp(10)
+                spacing: dp(10)
+                SectionCard:
+                    SectionTitle:
+                        text: 'Configuracion'
+                    Label:
+                        text: 'La app intenta encontrar las credenciales empaquetadas sola al iniciar.'
+                        size_hint_y: None
+                        height: self.texture_size[1] + dp(8)
+                        color: 0.70, 0.78, 0.88, 1
+                        halign: 'left'
+                        text_size: self.width, None
+                    FieldInput:
+                        id: creds_path
+                        hint_text: 'Ruta de credenciales JSON'
+                        text: root.creds
+                    FieldInput:
+                        id: sheet_name
+                        hint_text: 'Nombre del Spreadsheet'
+                        text: root.sheet
+                GridLayout:
+                    cols: 1
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: dp(8)
+                    AppButton:
+                        text: 'Guardar'
+                        on_release: root.save()
+                    AppButton:
+                        text: 'Probar conexion'
+                        background_color: 0.20, 0.43, 0.78, 1
+                        on_release: root.test_connection()
+                    AppButton:
+                        text: 'Volver'
+                        background_color: 0.31, 0.36, 0.47, 1
+                        on_release: app.root.current = 'manual'
 """
 
 
