@@ -42,3 +42,50 @@ Text: Provider: sdl2
 GL: NPOT texture support is available
 KV loaded successfully
 Base: Leaving application in progress...
+Logging configured successfully at: gimroutine_debug.log
+Starting main() function
+GymApp instance created
+Starting GymApp build...
+Window: Provider: sdl2
+GL: Using the "OpenGL" graphics system
+GL: GLEW initialization succeeded
+GL: Backend used <glew>
+GL: OpenGL version <b'4.6.0 NVIDIA 591.74'>
+GL: OpenGL vendor <b'NVIDIA Corporation'>
+GL: OpenGL renderer <b'NVIDIA GeForce RTX 4060/PCIe/SSE2'>
+GL: OpenGL parsed version: 4, 6
+GL: Shading version <b'4.60 NVIDIA'>
+GL: Texture max size <32768>
+GL: Texture max units <32>
+Window: auto add sdl2 input provider
+Window: virtual keyboard not allowed, single mode, not docked
+Text: Provider: sdl2
+GL: NPOT texture support is available
+KV loaded successfully
+App started successfully
+Base: Start application main loop
+Clipboard: Provider: winctypes
+Converted retries value: 3 -> Retry(total=3, connect=None, read=None, redirect=None, status=None)
+Converted retries value: 3 -> Retry(total=3, connect=None, read=None, redirect=None, status=None)
+Starting new HTTPS connection (1): oauth2.googleapis.com:443
+https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 400 None
+https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 400 None
+Base: Leaving application in progress...
+Logging configured successfully at: gimroutine_debug.log
+Starting GymApp build...
+Window: Provider: sdl2
+GL: Using the "OpenGL" graphics system
+GL: GLEW initialization succeeded
+GL: Backend used <glew>
+GL: OpenGL version <b'4.6.0 NVIDIA 591.74'>
+GL: OpenGL vendor <b'NVIDIA Corporation'>
+GL: OpenGL renderer <b'NVIDIA GeForce RTX 4060/PCIe/SSE2'>
+GL: OpenGL parsed version: 4, 6
+GL: Shading version <b'4.60 NVIDIA'>
+GL: Texture max size <32768>
+GL: Texture max units <32>
+Window: auto add sdl2 input provider
+Window: virtual keyboard not allowed, single mode, not docked
+Text: Provider: sdl2
+GL: NPOT texture support is available
+KV loaded successfully

@@ -208,21 +208,81 @@ class Config:
 
 
 class TrainingSession:
-    """Simple in-memory manager for the current training (list of exercises)."""
+    """Simple manager for the current training with persistent backup."""
     _exercises = []
+    BACKUP_FILE = os.path.join(get_app_storage_dir(), 'training_session_backup.json')
+
+    @classmethod
+    def _default_payload(cls):
+        return {
+            'meta': {},
+            'draft': {},
+            'exercises': [],
+        }
+
+    @classmethod
+    def load_backup(cls):
+        if not os.path.exists(cls.BACKUP_FILE):
+            return cls._default_payload()
+        try:
+            with open(cls.BACKUP_FILE, 'r', encoding='utf-8') as file_obj:
+                data = json.load(file_obj)
+            if not isinstance(data, dict):
+                return cls._default_payload()
+            return {
+                'meta': data.get('meta', {}) or {},
+                'draft': data.get('draft', {}) or {},
+                'exercises': data.get('exercises', []) or [],
+            }
+        except Exception:
+            return cls._default_payload()
+
+    @classmethod
+    def _write_backup(cls, payload):
+        with open(cls.BACKUP_FILE, 'w', encoding='utf-8') as file_obj:
+            json.dump(payload, file_obj, ensure_ascii=False, indent=2)
+
+    @classmethod
+    def update_backup(cls, meta=None, draft=None, exercises=None):
+        payload = cls.load_backup()
+        if meta is not None:
+            payload['meta'] = meta
+        if draft is not None:
+            payload['draft'] = draft
+        if exercises is not None:
+            payload['exercises'] = exercises
+            cls._exercises = list(exercises)
+        cls._write_backup(payload)
+
+    @classmethod
+    def restore_from_backup(cls):
+        payload = cls.load_backup()
+        cls._exercises = list(payload.get('exercises', []))
+        return payload
+
+    @classmethod
+    def clear_backup(cls):
+        cls._exercises = []
+        if os.path.exists(cls.BACKUP_FILE):
+            try:
+                os.remove(cls.BACKUP_FILE)
+            except Exception:
+                pass
 
     @classmethod
     def clear(cls):
-        cls._exercises = []
+        cls.clear_backup()
 
     @classmethod
     def add_exercise(cls, exercise: dict):
         cls._exercises.append(exercise)
+        cls.update_backup(exercises=cls._exercises)
 
     @classmethod
     def remove_exercise(cls, index: int):
         if 0 <= index < len(cls._exercises):
             cls._exercises.pop(index)
+            cls.update_backup(exercises=cls._exercises)
 
     @classmethod
     def get_exercises(cls):

@@ -47,6 +47,7 @@ from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.metrics import dp
+from kivy.clock import Clock
 
 from ocr import parse_ocr_to_fields, extract_text_from_image
 from utils import (
@@ -480,6 +481,109 @@ class ManualScreen(Screen):
     anotaciones = ObjectProperty(None)
     reps_default = ObjectProperty(None)
     rir_default = ObjectProperty(None)
+    _backup_event = None
+    _state_restored = False
+    _suspend_backup = False
+
+    def on_kv_post(self, base_widget):
+        fields = [
+            'fecha', 'rutina', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
+            'ejercicio', 'series', 'metodo', 'tiempo', 'reps_prev', 'reps', 'peso', 'rir', 'anotaciones',
+        ]
+        for field_name in fields:
+            widget = self.ids.get(field_name)
+            if widget is not None:
+                widget.bind(text=lambda *_: self.schedule_backup_save())
+
+    def on_pre_enter(self):
+        if not self._state_restored:
+            Clock.schedule_once(lambda *_: self.restore_session_state(), 0)
+
+    def schedule_backup_save(self, *_args):
+        if self._suspend_backup:
+            return
+        if self._backup_event is not None:
+            self._backup_event.cancel()
+        self._backup_event = Clock.schedule_once(lambda *_: self.persist_session_state(), 0.2)
+
+    def _meta_state(self):
+        return {
+            'fecha': self.ids.fecha.text,
+            'rutina': self.ids.rutina.text,
+            'mesociclo': self.ids.mesociclo.text,
+            'microciclo': self.ids.microciclo.text,
+            'reps_default': self.ids.reps_default.text,
+            'rir_default': self.ids.rir_default.text,
+        }
+
+    def _draft_state(self):
+        return {
+            'ejercicio': self.ejercicio.text,
+            'series': self.series.text,
+            'metodo': self.metodo.text,
+            'tiempo': self.tiempo.text,
+            'reps_prev': self.reps_prev.text,
+            'reps': self.reps.text,
+            'peso': self.peso.text,
+            'rir': self.rir.text,
+            'anotaciones': self.anotaciones.text,
+        }
+
+    def persist_session_state(self):
+        from utils import TrainingSession
+
+        if self._backup_event is not None:
+            self._backup_event.cancel()
+            self._backup_event = None
+        TrainingSession.update_backup(
+            meta=self._meta_state(),
+            draft=self._draft_state(),
+            exercises=TrainingSession.get_exercises(),
+        )
+
+    def restore_session_state(self):
+        from utils import TrainingSession
+
+        payload = TrainingSession.restore_from_backup()
+        meta = payload.get('meta', {})
+        draft = payload.get('draft', {})
+
+        self._suspend_backup = True
+        try:
+            self.ids.fecha.text = meta.get('fecha', '')
+            self.ids.rutina.text = meta.get('rutina', '')
+            self.ids.mesociclo.text = meta.get('mesociclo', '')
+            self.ids.microciclo.text = meta.get('microciclo', '')
+            self.ids.reps_default.text = meta.get('reps_default', '')
+            self.ids.rir_default.text = meta.get('rir_default', '')
+
+            self.ejercicio.text = draft.get('ejercicio', '')
+            self.series.text = draft.get('series', '')
+            self.metodo.text = draft.get('metodo', '')
+            self.tiempo.text = draft.get('tiempo', '')
+            self.reps_prev.text = draft.get('reps_prev', '')
+            self.reps.text = draft.get('reps', '')
+            self.peso.text = draft.get('peso', '')
+            self.rir.text = draft.get('rir', '')
+            self.anotaciones.text = draft.get('anotaciones', '')
+        finally:
+            self._suspend_backup = False
+
+        self.refresh_exercise_list()
+        self._state_restored = True
+
+    def reset_session_form(self):
+        self._suspend_backup = True
+        try:
+            for field_name in [
+                'fecha', 'rutina', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
+                'ejercicio', 'series', 'metodo', 'tiempo', 'reps_prev', 'reps', 'peso', 'rir', 'anotaciones',
+            ]:
+                widget = self.ids.get(field_name)
+                if widget is not None:
+                    widget.text = ''
+        finally:
+            self._suspend_backup = False
 
     def send_to_sheets(self):
         # kept for compatibility (sends current single exercise)
@@ -527,6 +631,7 @@ class ManualScreen(Screen):
         self.rir.text = ''
         self.anotaciones.text = ''
         self.refresh_exercise_list()
+        self.persist_session_state()
 
     def refresh_exercise_list(self):
         from utils import TrainingSession
@@ -551,6 +656,7 @@ class ManualScreen(Screen):
     def clear_session(self):
         from utils import TrainingSession
         TrainingSession.clear()
+        self.reset_session_form()
         self.refresh_exercise_list()
 
     def finalize_training(self):
@@ -595,6 +701,7 @@ class ManualScreen(Screen):
                 rows,
             )
             TrainingSession.clear()
+            self.reset_session_form()
             self.refresh_exercise_list()
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
@@ -809,6 +916,7 @@ class GymApp(App):
         try:
             logger.info("App started successfully")
             ensure_default_google_creds()
+            Clock.schedule_once(self.restore_manual_session_state, 0)
             if platform == 'android':
                 logger.info("Running on Android with internal app storage only")
 
@@ -819,6 +927,7 @@ class GymApp(App):
 
     def on_pause(self):
         try:
+            self.persist_manual_session_state()
             logger.info("App paused")
             return True
         except Exception as e:
@@ -828,10 +937,37 @@ class GymApp(App):
 
     def on_resume(self):
         try:
+            Clock.schedule_once(self.restore_manual_session_state, 0)
             logger.info("App resumed")
         except Exception as e:
             logger.error(f"Error in on_resume(): {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+
+    def on_stop(self):
+        try:
+            self.persist_manual_session_state()
+            logger.info("App stopped")
+        except Exception as e:
+            logger.error(f"Error in on_stop(): {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+    def persist_manual_session_state(self):
+        try:
+            if self.root is None:
+                return
+            manual = self.root.get_screen('manual')
+            manual.persist_session_state()
+        except Exception as e:
+            logger.warning(f"Could not persist manual session state: {e}")
+
+    def restore_manual_session_state(self, *_args):
+        try:
+            if self.root is None:
+                return
+            manual = self.root.get_screen('manual')
+            manual.restore_session_state()
+        except Exception as e:
+            logger.warning(f"Could not restore manual session state: {e}")
 
 
 def main():
