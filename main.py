@@ -1,6 +1,10 @@
 import os
 import logging
 import traceback
+import re
+import shutil
+import time
+from threading import Thread
 
 from kivy.utils import platform
 
@@ -53,8 +57,8 @@ from ocr import parse_ocr_to_fields, extract_text_from_image
 from utils import (
     Config,
     ensure_any_asset_in_app_storage,
-    find_existing_asset,
     get_asset_path,
+    get_app_storage_dir,
     import_json_to_app_storage,
 )
 
@@ -149,6 +153,18 @@ KV = """
     hint_text_color: 0.65, 0.72, 0.82, 1
     cursor_color: 0.36, 0.78, 0.69, 1
 
+<SeriesCell@TextInput>:
+    size_hint_y: None
+    height: dp(42)
+    multiline: False
+    padding: [dp(10), dp(10), dp(10), dp(10)]
+    background_normal: ''
+    background_active: ''
+    background_color: 0.17, 0.21, 0.28, 1
+    foreground_color: 0.95, 0.97, 1, 1
+    hint_text_color: 0.65, 0.72, 0.82, 1
+    cursor_color: 0.36, 0.78, 0.69, 1
+
 <AppButton@Button>:
     size_hint_y: None
     height: dp(46)
@@ -166,13 +182,9 @@ ScreenManager:
 <ManualScreen>:
     name: 'manual'
     ejercicio: ejercicio
-    series: series
     metodo: metodo
     tiempo: tiempo
     reps_prev: reps_prev
-    reps: reps
-    peso: peso
-    rir: rir
     anotaciones: anotaciones
     fecha: fecha
     rutina: rutina
@@ -180,6 +192,7 @@ ScreenManager:
     microciclo: microciclo
     reps_default: reps_default
     rir_default: rir_default
+    series_editor: series_editor
     BoxLayout:
         orientation: 'vertical'
         canvas.before:
@@ -254,9 +267,6 @@ ScreenManager:
                             id: ejercicio
                             hint_text: 'Ejercicio'
                         FieldInput:
-                            id: series
-                            hint_text: 'Series'
-                        FieldInput:
                             id: metodo
                             hint_text: 'Metodo'
                         FieldInput:
@@ -265,15 +275,6 @@ ScreenManager:
                         FieldInput:
                             id: reps_prev
                             hint_text: 'Repeticiones semana anterior'
-                        FieldInput:
-                            id: reps
-                            hint_text: 'Repeticiones actuales'
-                        FieldInput:
-                            id: peso
-                            hint_text: 'Peso utilizado'
-                        FieldInput:
-                            id: rir
-                            hint_text: 'RIR'
                         TextInput:
                             id: anotaciones
                             hint_text: 'Anotaciones'
@@ -288,6 +289,59 @@ ScreenManager:
                             cursor_color: 0.36, 0.78, 0.69, 1
                 SectionCard:
                     SectionTitle:
+                        text: 'Series'
+                    Label:
+                        text: 'Carga peso, reps y RIR dentro del mismo ejercicio.'
+                        size_hint_y: None
+                        height: self.texture_size[1] + dp(8)
+                        color: 0.70, 0.78, 0.88, 1
+                        halign: 'left'
+                        text_size: self.width, None
+                    GridLayout:
+                        cols: 4
+                        size_hint_y: None
+                        height: dp(22)
+                        spacing: dp(6)
+                        Label:
+                            text: 'Serie'
+                            color: 0.70, 0.78, 0.88, 1
+                            halign: 'left'
+                            text_size: self.size
+                        Label:
+                            text: 'Peso'
+                            color: 0.70, 0.78, 0.88, 1
+                            halign: 'center'
+                            text_size: self.size
+                        Label:
+                            text: 'Reps'
+                            color: 0.70, 0.78, 0.88, 1
+                            halign: 'center'
+                            text_size: self.size
+                        Label:
+                            text: 'RIR'
+                            color: 0.70, 0.78, 0.88, 1
+                            halign: 'center'
+                            text_size: self.size
+                    GridLayout:
+                        id: series_editor
+                        cols: 1
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(8)
+                    GridLayout:
+                        cols: 2
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(8)
+                        AppButton:
+                            text: 'Agregar serie'
+                            on_release: root.add_series_row()
+                        AppButton:
+                            text: 'Duplicar ultima'
+                            background_color: 0.20, 0.43, 0.78, 1
+                            on_release: root.duplicate_last_series()
+                SectionCard:
+                    SectionTitle:
                         text: 'Acciones'
                     GridLayout:
                         cols: 2
@@ -297,7 +351,7 @@ ScreenManager:
                         row_default_height: dp(46)
                         row_force_default: True
                         AppButton:
-                            text: 'Agregar ejercicio'
+                            text: 'Guardar ejercicio'
                             on_release: root.add_exercise()
                         AppButton:
                             text: 'Finalizar entrenamiento'
@@ -356,24 +410,28 @@ ScreenManager:
                     SectionTitle:
                         text: 'OCR'
                     Label:
-                        text: 'Importa una imagen, revisa el texto y mandalo directo al formulario.'
+                        text: 'Usa la camara o la galeria y pasalo al formulario sin escribir todo a mano.'
                         size_hint_y: None
                         height: self.texture_size[1] + dp(8)
                         color: 0.70, 0.78, 0.88, 1
                         halign: 'left'
                         text_size: self.width, None
                     GridLayout:
-                        cols: 1
+                        cols: 2
                         size_hint_y: None
                         height: self.minimum_height
                         spacing: dp(8)
                         AppButton:
-                            text: 'Tomar foto (Camera)'
+                            text: 'Abrir camara'
                             background_color: 0.20, 0.43, 0.78, 1
                             on_release: root.capture_camera()
                         AppButton:
-                            text: 'Seleccionar imagen'
+                            text: 'Abrir galeria'
                             on_release: root.open_filechooser()
+                        AppButton:
+                            text: 'Reprocesar imagen'
+                            background_color: 0.18, 0.55, 0.49, 1
+                            on_release: root.do_ocr()
                         AppButton:
                             text: 'Mapear a campos'
                             background_color: 0.55, 0.43, 0.20, 1
@@ -471,16 +529,13 @@ ScreenManager:
 
 class ManualScreen(Screen):
     ejercicio = ObjectProperty(None)
-    series = ObjectProperty(None)
     metodo = ObjectProperty(None)
     tiempo = ObjectProperty(None)
     reps_prev = ObjectProperty(None)
-    reps = ObjectProperty(None)
-    peso = ObjectProperty(None)
-    rir = ObjectProperty(None)
     anotaciones = ObjectProperty(None)
     reps_default = ObjectProperty(None)
     rir_default = ObjectProperty(None)
+    series_editor = ObjectProperty(None)
     _backup_event = None
     _state_restored = False
     _suspend_backup = False
@@ -488,12 +543,14 @@ class ManualScreen(Screen):
     def on_kv_post(self, base_widget):
         fields = [
             'fecha', 'rutina', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
-            'ejercicio', 'series', 'metodo', 'tiempo', 'reps_prev', 'reps', 'peso', 'rir', 'anotaciones',
+            'ejercicio', 'metodo', 'tiempo', 'reps_prev', 'anotaciones',
         ]
         for field_name in fields:
             widget = self.ids.get(field_name)
             if widget is not None:
                 widget.bind(text=lambda *_: self.schedule_backup_save())
+        if not self.get_series_rows():
+            self.add_series_row()
 
     def on_pre_enter(self):
         if not self._state_restored:
@@ -519,14 +576,11 @@ class ManualScreen(Screen):
     def _draft_state(self):
         return {
             'ejercicio': self.ejercicio.text,
-            'series': self.series.text,
             'metodo': self.metodo.text,
             'tiempo': self.tiempo.text,
             'reps_prev': self.reps_prev.text,
-            'reps': self.reps.text,
-            'peso': self.peso.text,
-            'rir': self.rir.text,
             'anotaciones': self.anotaciones.text,
+            'series_entries': self.get_series_entries(apply_defaults=False, include_empty=True),
         }
 
     def persist_session_state(self):
@@ -558,100 +612,304 @@ class ManualScreen(Screen):
             self.ids.rir_default.text = meta.get('rir_default', '')
 
             self.ejercicio.text = draft.get('ejercicio', '')
-            self.series.text = draft.get('series', '')
             self.metodo.text = draft.get('metodo', '')
             self.tiempo.text = draft.get('tiempo', '')
             self.reps_prev.text = draft.get('reps_prev', '')
-            self.reps.text = draft.get('reps', '')
-            self.peso.text = draft.get('peso', '')
-            self.rir.text = draft.get('rir', '')
             self.anotaciones.text = draft.get('anotaciones', '')
+            self.set_series_entries(draft.get('series_entries') or [{}])
         finally:
             self._suspend_backup = False
 
         self.refresh_exercise_list()
         self._state_restored = True
 
+    def make_series_input(self, hint_text, input_filter=None):
+        from kivy.uix.textinput import TextInput
+
+        return TextInput(
+            hint_text=hint_text,
+            multiline=False,
+            size_hint_y=None,
+            height=dp(42),
+            padding=[dp(10), dp(10), dp(10), dp(10)],
+            background_normal='',
+            background_active='',
+            background_color=(0.17, 0.21, 0.28, 1),
+            foreground_color=(0.95, 0.97, 1, 1),
+            hint_text_color=(0.65, 0.72, 0.82, 1),
+            cursor_color=(0.36, 0.78, 0.69, 1),
+            input_filter=input_filter,
+        )
+
+    def get_series_rows(self):
+        return list(reversed(self.ids.series_editor.children))
+
+    def bind_series_row(self, row):
+        for widget in (row.peso_input, row.reps_input, row.rir_input):
+            widget.bind(text=lambda *_: self.schedule_backup_save())
+
+    def refresh_series_row_labels(self):
+        for index, row in enumerate(self.get_series_rows(), start=1):
+            row.series_label.text = f'S{index}'
+
+    def add_series_row(self, values=None):
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+
+        values = values or {}
+        row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(6))
+        row.series_label = Label(
+            text='S1',
+            size_hint_x=None,
+            width=dp(34),
+            color=(0.93, 0.95, 0.98, 1),
+            halign='left',
+            valign='middle',
+        )
+        row.series_label.bind(size=lambda inst, size: setattr(inst, 'text_size', size))
+
+        row.peso_input = self.make_series_input('kg')
+        row.reps_input = self.make_series_input('reps', input_filter='int')
+        rir_box = BoxLayout(spacing=dp(4))
+        row.rir_input = self.make_series_input('RIR')
+        remove_btn = Button(
+            text='X',
+            size_hint_x=None,
+            width=dp(36),
+            background_normal='',
+            background_down='',
+            background_color=(0.45, 0.20, 0.20, 1),
+            color=(1, 1, 1, 1),
+        )
+        remove_btn.bind(on_release=lambda *_: self.remove_series_row(row))
+        rir_box.add_widget(row.rir_input)
+        rir_box.add_widget(remove_btn)
+
+        row.add_widget(row.series_label)
+        row.add_widget(row.peso_input)
+        row.add_widget(row.reps_input)
+        row.add_widget(rir_box)
+
+        row.peso_input.text = values.get('Peso', '')
+        row.reps_input.text = values.get('Reps', '')
+        row.rir_input.text = values.get('RIR', '')
+
+        self.ids.series_editor.add_widget(row)
+        self.bind_series_row(row)
+        self.refresh_series_row_labels()
+        self.schedule_backup_save()
+
+    def remove_series_row(self, row):
+        if len(self.get_series_rows()) <= 1:
+            row.peso_input.text = ''
+            row.reps_input.text = ''
+            row.rir_input.text = ''
+        else:
+            self.ids.series_editor.remove_widget(row)
+        self.refresh_series_row_labels()
+        self.schedule_backup_save()
+
+    def clear_series_rows(self):
+        self.ids.series_editor.clear_widgets()
+
+    def set_series_entries(self, entries):
+        self._suspend_backup = True
+        try:
+            self.clear_series_rows()
+            for entry in entries or [{}]:
+                self.add_series_row(entry)
+            if not self.get_series_rows():
+                self.add_series_row()
+        finally:
+            self._suspend_backup = False
+        self.refresh_series_row_labels()
+
+    def duplicate_last_series(self):
+        rows = self.get_series_entries(apply_defaults=False, include_empty=True)
+        if rows:
+            self.add_series_row(rows[-1])
+        else:
+            self.add_series_row()
+
+    def get_series_entries(self, apply_defaults=True, include_empty=False):
+        entries = []
+        reps_default = self.ids.reps_default.text.strip()
+        rir_default = self.ids.rir_default.text.strip()
+
+        for row in self.get_series_rows():
+            peso = row.peso_input.text.strip()
+            reps = row.reps_input.text.strip()
+            rir = row.rir_input.text.strip()
+            if not any([peso, reps, rir]):
+                if include_empty:
+                    entries.append({'Peso': '', 'Reps': '', 'RIR': ''})
+                continue
+            if apply_defaults and not reps:
+                reps = reps_default
+            if apply_defaults and not rir:
+                rir = rir_default
+            entries.append({'Peso': peso, 'Reps': reps, 'RIR': rir})
+        return entries
+
+    def reset_exercise_editor(self):
+        self._suspend_backup = True
+        try:
+            for field_name in ['ejercicio', 'metodo', 'tiempo', 'reps_prev', 'anotaciones']:
+                widget = self.ids.get(field_name)
+                if widget is not None:
+                    widget.text = ''
+            self.set_series_entries([{}])
+        finally:
+            self._suspend_backup = False
+        self.schedule_backup_save()
+
     def reset_session_form(self):
         self._suspend_backup = True
         try:
             for field_name in [
                 'fecha', 'rutina', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
-                'ejercicio', 'series', 'metodo', 'tiempo', 'reps_prev', 'reps', 'peso', 'rir', 'anotaciones',
+                'ejercicio', 'metodo', 'tiempo', 'reps_prev', 'anotaciones',
             ]:
                 widget = self.ids.get(field_name)
                 if widget is not None:
                     widget.text = ''
+            self.set_series_entries([{}])
         finally:
             self._suspend_backup = False
 
+    def build_current_exercise(self):
+        exercise_name = self.ejercicio.text.strip()
+        if not exercise_name:
+            raise ValueError('Escribí el nombre del ejercicio.')
+
+        series_entries = self.get_series_entries()
+        if not series_entries:
+            raise ValueError('Cargá al menos una serie con reps, peso o RIR.')
+
+        return {
+            'Ejercicio': exercise_name,
+            'Series': str(len(series_entries)),
+            'Método': self.metodo.text.strip(),
+            'Tiempo': self.tiempo.text.strip(),
+            'Reps Semana Anterior': self.reps_prev.text.strip(),
+            'Anotaciones': self.anotaciones.text.strip(),
+            'SeriesEntries': series_entries,
+        }
+
+    def build_rows_for_exercises(self, exercises):
+        rows = []
+        rutina = self.ids.rutina.text
+        for ex in exercises:
+            series_entries = ex.get('SeriesEntries') or []
+            total_series = max(len(series_entries), 1)
+            for index, series in enumerate(series_entries or [{}], start=1):
+                rows.append([
+                    rutina,
+                    ex.get('Ejercicio', ''),
+                    f'{index}/{total_series}',
+                    ex.get('Método', ''),
+                    ex.get('Tiempo', ''),
+                    '',
+                    ex.get('Reps Semana Anterior', ''),
+                    series.get('Reps', ''),
+                    series.get('Peso', ''),
+                    series.get('RIR', ''),
+                    ex.get('Anotaciones', ''),
+                ])
+        return rows
+
+    def show_popup(self, title, message, size_hint=(0.8, 0.4)):
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+
+        Popup(title=title, content=Label(text=message), size_hint=size_hint).open()
+
     def send_to_sheets(self):
-        # kept for compatibility (sends current single exercise)
         config = Config.load()
         client = create_sheets_client()
         try:
+            exercise = self.build_current_exercise()
             client.configure_from_service_account(config.get('creds_path'))
             sheet_name = config.get('sheet_name', 'Entrenamientos')
-            row = [self.ids.fecha.text, self.ids.rutina.text, self.ids.mesociclo.text, self.ids.microciclo.text,
-                   self.ejercicio.text, self.series.text, self.metodo.text, self.tiempo.text,
-                   self.reps_prev.text, self.reps.text, self.peso.text, self.rir.text, self.anotaciones.text]
-            client.append_row(sheet_name, row)
-            self.manager.current = 'manual'
+            rows = self.build_rows_for_exercises([exercise])
+            client.append_training(
+                sheet_name,
+                {
+                    'Fecha': self.ids.fecha.text,
+                    'Rutina': self.ids.rutina.text,
+                    'Mesociclo': self.ids.mesociclo.text,
+                    'Microciclo': self.ids.microciclo.text,
+                },
+                rows,
+            )
+            self.reset_exercise_editor()
+            self.show_popup('Éxito', 'Ejercicio enviado.', size_hint=(0.6, 0.3))
+        except ValueError as e:
+            self.show_popup('Falta info', str(e), size_hint=(0.75, 0.35))
         except Exception as e:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Error', content=Label(text=str(e)), size_hint=(0.8, 0.4)).open()
+            self.show_popup('Error', str(e))
 
     def add_exercise(self):
-        # Read current fields and add to session
         from utils import TrainingSession
-        # Use per-exercise values; if empty, fall back to session defaults
-        reps_val = self.reps.text.strip() or self.ids.reps_default.text.strip()
-        rir_val = self.rir.text.strip() or self.ids.rir_default.text.strip()
-        ex = {
-            'Ejercicio': self.ejercicio.text,
-            'Series': self.series.text,
-            'Método': self.metodo.text,
-            'Tiempo': self.tiempo.text,
-            'Reps Semana Anterior': self.reps_prev.text,
-            'Reps': reps_val,
-            'Peso': self.peso.text,
-            'RIR': rir_val,
-            'Anotaciones': self.anotaciones.text
-        }
-        TrainingSession.add_exercise(ex)
-        # Clear exercise fields for next entry
-        self.ejercicio.text = ''
-        self.series.text = ''
-        self.metodo.text = ''
-        self.tiempo.text = ''
-        self.reps_prev.text = ''
-        self.reps.text = ''
-        self.peso.text = ''
-        self.rir.text = ''
-        self.anotaciones.text = ''
-        self.refresh_exercise_list()
-        self.persist_session_state()
+
+        try:
+            exercise = self.build_current_exercise()
+            TrainingSession.add_exercise(exercise)
+            self.reset_exercise_editor()
+            self.refresh_exercise_list()
+            self.persist_session_state()
+        except ValueError as e:
+            self.show_popup('Falta info', str(e), size_hint=(0.75, 0.35))
 
     def refresh_exercise_list(self):
         from utils import TrainingSession
         exercises = TrainingSession.get_exercises()
         container = self.ids.exercise_list
         container.clear_widgets()
-        # show each exercise with delete button
         from kivy.uix.boxlayout import BoxLayout
         from kivy.uix.label import Label
         from kivy.uix.button import Button
+
         for i, ex in enumerate(exercises):
-            bl = BoxLayout(size_hint_y=None, height=dp(40))
-            txt = f"{i+1}. {ex.get('Ejercicio','')} | S:{ex.get('Series','')} R:{ex.get('Reps','')} P:{ex.get('Peso','')}"
-            bl.add_widget(Label(text=txt))
-            btn = Button(text='Eliminar', size_hint_x=None, width=dp(90))
+            block = BoxLayout(orientation='horizontal', spacing=dp(8), padding=[dp(10), dp(8), dp(10), dp(8)], size_hint_y=None)
+            block.bind(minimum_height=block.setter('height'))
+            lines = [f"[b]{i+1}. {ex.get('Ejercicio', '')}[/b]"]
+            if ex.get('Método') or ex.get('Tiempo'):
+                meta_bits = [bit for bit in [ex.get('Método', ''), ex.get('Tiempo', '')] if bit]
+                lines.append(' | '.join(meta_bits))
+            for series_index, series in enumerate(ex.get('SeriesEntries') or [], start=1):
+                lines.append(
+                    f"S{series_index}: {series.get('Peso', '-')}kg x {series.get('Reps', '-')} | RIR {series.get('RIR', '-')}"
+                )
+            if ex.get('Anotaciones'):
+                lines.append(ex.get('Anotaciones', ''))
+
+            label = Label(
+                text='\n'.join(lines),
+                markup=True,
+                halign='left',
+                valign='middle',
+                size_hint_y=None,
+            )
+            label.bind(width=lambda inst, width: setattr(inst, 'text_size', (width, None)))
+            label.bind(texture_size=lambda inst, size: setattr(inst, 'height', size[1] + dp(12)))
+            block.add_widget(label)
+
+            btn = Button(
+                text='Eliminar',
+                size_hint_x=None,
+                width=dp(92),
+                background_normal='',
+                background_down='',
+                background_color=(0.45, 0.20, 0.20, 1),
+                color=(1, 1, 1, 1),
+            )
             def make_cb(idx):
                 return lambda *_: (TrainingSession.remove_exercise(idx), self.refresh_exercise_list())
             btn.bind(on_release=make_cb(i))
-            bl.add_widget(btn)
-            container.add_widget(bl)
+            block.add_widget(btn)
+            container.add_widget(block)
 
     def clear_session(self):
         from utils import TrainingSession
@@ -676,25 +934,7 @@ class ManualScreen(Screen):
             rutina = self.ids.rutina.text
             meso = self.ids.mesociclo.text
             micro = self.ids.microciclo.text
-            # Build rows (A..K) to match the sheet template (like the reference image)
-            rows = []
-            for ex in exercises:
-                # Columns: Dia, Ejercicio, Series, Metodo, TEMPO, Tiempo descanso,
-                #          Reps semana anterior, Reps, Peso utilizado, RIR, Anotaciones
-                row = [
-                    rutina,
-                    ex.get('Ejercicio', ''),
-                    ex.get('Series', ''),
-                    ex.get('Método', ''),
-                    ex.get('Tiempo', ''),  # mapped to TEMPO
-                    '',  # descanso (no hay campo dedicado en UI)
-                    ex.get('Reps Semana Anterior', ''),
-                    ex.get('Reps', ''),
-                    ex.get('Peso', ''),
-                    ex.get('RIR', ''),
-                    ex.get('Anotaciones', ''),
-                ]
-                rows.append(row)
+            rows = self.build_rows_for_exercises(exercises)
             client.append_training(
                 sheet_name,
                 {'Fecha': fecha, 'Rutina': rutina, 'Mesociclo': meso, 'Microciclo': micro},
@@ -703,71 +943,254 @@ class ManualScreen(Screen):
             TrainingSession.clear()
             self.reset_session_form()
             self.refresh_exercise_list()
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Éxito', content=Label(text='Entrenamiento enviado.'), size_hint=(0.6,0.3)).open()
+            self.show_popup('Éxito', 'Entrenamiento enviado.', size_hint=(0.6, 0.3))
         except Exception as e:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Error', content=Label(text=str(e)), size_hint=(0.8,0.4)).open()
+            self.show_popup('Error', str(e))
 
 
 class OCRScreen(Screen):
+    ANDROID_IMAGE_PICKER_REQUEST = 9311
     ocr_text = StringProperty('')
     image_path = StringProperty('')
 
     def capture_camera(self):
-        # Simple approach: open native camera via Plyer on mobile would be better.
-        # Here, on desktop we fallback to ask user to select image.
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
-        Popup(title='Info', content=Label(text='En dispositivos móviles se usará la cámara. En PC, selecciona una imagen.'), size_hint=(0.8,0.4)).open()
+        if platform == 'android':
+            self.capture_camera_android()
+            return
+
+        try:
+            from plyer import camera
+
+            target_path = os.path.join(get_app_storage_dir(), f'ocr_capture_{int(time.time() * 1000)}.jpg')
+            self.ids.ocr_text.text = 'Abriendo cámara...'
+            camera.take_picture(filename=target_path, on_complete=self.on_camera_complete)
+        except Exception as e:
+            self.show_popup('Error', str(e))
+
+    def capture_camera_android(self):
+        try:
+            from android.permissions import Permission, check_permission, request_permissions
+
+            if check_permission(Permission.CAMERA):
+                self.open_mobile_camera()
+                return
+
+            request_permissions([Permission.CAMERA], self.on_android_camera_permissions)
+        except Exception:
+            self.open_mobile_camera()
+
+    def on_android_camera_permissions(self, permissions, grants):
+        if all(grants):
+            self.open_mobile_camera()
+        else:
+            self.show_popup('Permiso', 'Necesito permiso de cámara para sacar la foto.')
+
+    def open_mobile_camera(self):
+        from plyer import camera
+
+        target_path = os.path.join(get_app_storage_dir(), f'ocr_capture_{int(time.time() * 1000)}.jpg')
+        self.ids.ocr_text.text = 'Abriendo cámara...'
+        camera.take_picture(filename=target_path, on_complete=self.on_camera_complete)
+
+    def on_camera_complete(self, file_path):
+        Clock.schedule_once(lambda *_: self.finish_camera_capture(file_path), 0)
+
+    def finish_camera_capture(self, file_path):
+        if file_path and os.path.exists(file_path):
+            self.image_path = file_path
+            self.do_ocr()
+            return
+        self.show_popup('Cancelado', 'No se guardó ninguna foto.', size_hint=(0.75, 0.35))
 
     def open_filechooser(self):
-        from kivy.uix.filechooser import FileChooserIconView
-        from kivy.uix.popup import Popup
-        box = FileChooserIconView()
-        popup = Popup(title='Seleccionar imagen', content=box, size_hint=(0.9,0.9))
+        try:
+            if platform == 'android':
+                self.open_android_image_picker()
+                return
 
-        def on_selection(instance, selection):
-            if selection:
-                self.image_path = selection[0]
-                popup.dismiss()
-                self.do_ocr()
+            if platform == 'ios':
+                from plyer import filechooser
+                filechooser.open_file(
+                    on_selection=self.handle_image_selection,
+                    filters=['*.png', '*.jpg', '*.jpeg', '*.webp'],
+                    multiple=False,
+                )
+                return
 
-        box.bind(on_submit=lambda inst, sel, touch: on_selection(inst, sel))
-        popup.open()
+            from kivy.uix.filechooser import FileChooserIconView
+            from kivy.uix.popup import Popup
+
+            box = FileChooserIconView(filters=['*.png', '*.jpg', '*.jpeg', '*.webp'])
+            popup = Popup(title='Seleccionar imagen', content=box, size_hint=(0.9, 0.9))
+
+            def on_selection(instance, selection):
+                if selection:
+                    self.handle_image_selection(selection)
+                    popup.dismiss()
+
+            box.bind(on_submit=lambda inst, sel, touch: on_selection(inst, sel))
+            popup.open()
+        except Exception as e:
+            self.show_popup('Error', str(e))
+
+    def open_android_image_picker(self):
+        from android import activity
+        from jnius import autoclass
+
+        Intent = autoclass('android.content.Intent')
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+        chooser_intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        chooser_intent.addCategory(Intent.CATEGORY_OPENABLE)
+        chooser_intent.setType('image/*')
+        chooser_intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        chooser_intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+
+        activity.unbind(on_activity_result=self.on_android_image_result)
+        activity.bind(on_activity_result=self.on_android_image_result)
+        PythonActivity.mActivity.startActivityForResult(
+            chooser_intent,
+            self.ANDROID_IMAGE_PICKER_REQUEST,
+        )
+
+    def on_android_image_result(self, request_code, result_code, intent):
+        if request_code != self.ANDROID_IMAGE_PICKER_REQUEST:
+            return
+
+        from android import activity
+        from jnius import autoclass
+
+        activity.unbind(on_activity_result=self.on_android_image_result)
+
+        Activity = autoclass('android.app.Activity')
+        Intent = autoclass('android.content.Intent')
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+        if result_code != Activity.RESULT_OK or intent is None:
+            return
+
+        uri = intent.getData()
+        if uri is None:
+            self.show_popup('Error', 'Android no devolvió ninguna imagen.')
+            return
+
+        try:
+            flags = intent.getFlags() & (
+                Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            PythonActivity.mActivity.getContentResolver().takePersistableUriPermission(uri, flags)
+        except Exception:
+            pass
+
+        self.handle_image_selection([str(uri.toString())])
+
+    def import_image_to_app_storage(self, source):
+        if source.startswith('content://') and platform == 'android':
+            from jnius import autoclass
+
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            Uri = autoclass('android.net.Uri')
+            BufferedInputStream = autoclass('java.io.BufferedInputStream')
+            BitmapFactory = autoclass('android.graphics.BitmapFactory')
+            BitmapCompressFormat = autoclass('android.graphics.Bitmap$CompressFormat')
+            FileOutputStream = autoclass('java.io.FileOutputStream')
+
+            resolver = PythonActivity.mActivity.getContentResolver()
+            input_stream = BufferedInputStream(resolver.openInputStream(Uri.parse(source)))
+            bitmap = BitmapFactory.decodeStream(input_stream)
+            input_stream.close()
+            if bitmap is None:
+                raise ValueError('No se pudo abrir la imagen seleccionada.')
+
+            target_path = os.path.join(get_app_storage_dir(), f'ocr_import_{int(time.time() * 1000)}.jpg')
+            output_stream = FileOutputStream(target_path)
+            bitmap.compress(BitmapCompressFormat.JPEG, 95, output_stream)
+            output_stream.flush()
+            output_stream.close()
+            bitmap.recycle()
+            return target_path
+
+        if os.path.exists(source):
+            extension = os.path.splitext(source)[1] or '.jpg'
+            target_path = os.path.join(get_app_storage_dir(), f'ocr_import_{int(time.time() * 1000)}{extension}')
+            shutil.copyfile(source, target_path)
+            return target_path
+
+        raise FileNotFoundError(source)
+
+    def handle_image_selection(self, selection):
+        if not selection:
+            return
+
+        try:
+            selected = selection[0]
+            self.image_path = self.import_image_to_app_storage(selected)
+            self.do_ocr()
+        except Exception as e:
+            self.show_popup('Error', str(e))
 
     def do_ocr(self):
         if not self.image_path:
             return
+
+        self.ids.ocr_text.text = 'Procesando imagen...'
+        Thread(target=self.run_ocr, daemon=True).start()
+
+    def run_ocr(self):
         try:
-            text = extract_text_from_image(self.image_path)
-            self.ocr_text = text
+            config = Config.load()
+            text = extract_text_from_image(
+                self.image_path,
+                creds_path=config.get('creds_path'),
+                prefer_cloud=platform in ('android', 'ios'),
+            )
+            Clock.schedule_once(lambda *_: self.finish_ocr(text=text), 0)
         except Exception as e:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='OCR Error', content=Label(text=str(e)), size_hint=(0.8,0.4)).open()
+            Clock.schedule_once(lambda *_: self.finish_ocr(error=str(e)), 0)
+
+    def finish_ocr(self, text='', error=''):
+        if error:
+            self.show_popup('OCR Error', error)
+            if self.image_path:
+                self.ids.ocr_text.text = f'Error al procesar:\n{error}'
+            return
+        self.ocr_text = text
 
     def map_text_to_fields(self):
         mapped = parse_ocr_to_fields(self.ocr_text)
-        # push mapped values to Manual screen fields
         manual = self.manager.get_screen('manual')
         manual.ejercicio.text = mapped.get('Ejercicio', '')
-        manual.series.text = mapped.get('Series', '')
         manual.metodo.text = mapped.get('Método', '')
         manual.tiempo.text = mapped.get('Tiempo', '')
         manual.reps_prev.text = mapped.get('Reps Semana Anterior', '')
-        manual.reps.text = mapped.get('Reps', '')
-        manual.peso.text = mapped.get('Peso', '')
-        manual.rir.text = mapped.get('RIR', '')
         manual.anotaciones.text = mapped.get('Anotaciones', '')
+        series_count = 1
+        series_raw = mapped.get('Series', '')
+        matches = re.findall(r'\d+', series_raw)
+        if matches:
+            series_count = max(1, int(matches[0]))
+        entries = [
+            {
+                'Peso': mapped.get('Peso', ''),
+                'Reps': mapped.get('Reps', ''),
+                'RIR': mapped.get('RIR', ''),
+            }
+        ]
+        while len(entries) < series_count:
+            entries.append({})
+        manual.set_series_entries(entries)
         self.manager.current = 'manual'
 
     def send_mapped_to_sheets(self):
-        # map then send
         self.map_text_to_fields()
         self.manager.get_screen('manual').send_to_sheets()
+
+    def show_popup(self, title, message, size_hint=(0.8, 0.4)):
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+
+        Popup(title=title, content=Label(text=message), size_hint=size_hint).open()
 
 
 class SettingsScreen(Screen):

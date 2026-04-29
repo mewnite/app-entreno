@@ -11,6 +11,8 @@ def get_app_storage_dir():
         if platform == 'android':
             from android.storage import app_storage_path
             path = app_storage_path()
+        elif platform == 'ios':
+            path = os.path.expanduser('~/Documents')
         else:
             path = os.path.dirname(os.path.abspath(__file__))
     except Exception:

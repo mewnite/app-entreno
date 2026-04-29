@@ -1,8 +1,16 @@
+import base64
+import json
 import os
 import re
 
+import requests
+from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials
+
+from utils import get_asset_path, read_android_content_uri
+
 # NOTE:
-# On Android (Buildozer), `opencv-python` and `pytesseract` are typically unavailable unless you
+# On Android/iOS, `opencv-python` and `pytesseract` are typically unavailable unless you
 # add custom recipes/native integration. Import them lazily so the app can start without OCR.
 try:
     import cv2  # type: ignore
@@ -20,24 +28,85 @@ except Exception:  # pragma: no cover
     Image = None
 
 
-def extract_text_from_image(path: str) -> str:
-    if cv2 is None or pytesseract is None or Image is None:
+VISION_SCOPES = ['https://www.googleapis.com/auth/cloud-platform']
+VISION_URL = 'https://vision.googleapis.com/v1/images:annotate'
+
+
+def extract_text_with_cloud_vision(path: str, creds_path: str) -> str:
+    if not creds_path:
         raise RuntimeError(
-            "OCR no disponible en este dispositivo/build. "
-            "En Android, `opencv-python` y `pytesseract` no vienen incluidos por defecto: "
-            "usa OCR en la nube o integra una solución nativa (ML Kit / tess-two)."
+            'No hay credenciales configuradas para OCR móvil. '
+            'Importá primero el JSON de Google en Configuración.'
         )
+
+    resolved_creds = get_asset_path(creds_path)
+    if resolved_creds.startswith('content://'):
+        creds_info = json.loads(read_android_content_uri(resolved_creds))
+        creds = Credentials.from_service_account_info(creds_info, scopes=VISION_SCOPES)
+    else:
+        creds = Credentials.from_service_account_file(resolved_creds, scopes=VISION_SCOPES)
+
+    creds.refresh(Request())
+
+    with open(path, 'rb') as file_obj:
+        image_content = base64.b64encode(file_obj.read()).decode('utf-8')
+
+    response = requests.post(
+        VISION_URL,
+        headers={'Authorization': f'Bearer {creds.token}'},
+        json={
+            'requests': [
+                {
+                    'image': {'content': image_content},
+                    'features': [{'type': 'DOCUMENT_TEXT_DETECTION'}],
+                }
+            ]
+        },
+        timeout=45,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    data = (payload.get('responses') or [{}])[0]
+
+    if data.get('error'):
+        message = data['error'].get('message', 'Error desconocido en OCR cloud.')
+        if 'vision.googleapis.com' in message.lower():
+            raise RuntimeError(
+                'Google Vision API no está habilitada para este proyecto. '
+                'Activala en Google Cloud Console y volvé a probar.'
+            )
+        raise RuntimeError(message)
+
+    text = (
+        data.get('fullTextAnnotation', {}).get('text')
+        or ((data.get('textAnnotations') or [{}])[0].get('description', ''))
+    )
+    if not text.strip():
+        raise RuntimeError('No se detectó texto en la imagen.')
+    return text
+
+
+def extract_text_from_image(path: str, creds_path: str = '', prefer_cloud: bool = False) -> str:
     if not os.path.exists(path):
         raise FileNotFoundError(path)
-    # Read with OpenCV
+
+    if prefer_cloud:
+        return extract_text_with_cloud_vision(path, creds_path)
+
+    if cv2 is None or pytesseract is None or Image is None:
+        if creds_path:
+            return extract_text_with_cloud_vision(path, creds_path)
+        raise RuntimeError(
+            'OCR no disponible en este dispositivo/build. '
+            'Configurá credenciales de Google para usar OCR cloud desde mobile.'
+        )
+
     img = cv2.imread(path)
     if img is None:
         raise ValueError('No se pudo leer la imagen')
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # simple preprocessing
     gray = cv2.medianBlur(gray, 3)
     _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # Save temp image for pytesseract
     tmp = path + '.ocr.png'
     cv2.imwrite(tmp, th)
     try:
