@@ -1247,7 +1247,7 @@ class SettingsScreen(Screen):
 
         chooser_intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
         chooser_intent.addCategory(Intent.CATEGORY_OPENABLE)
-        chooser_intent.setType('application/json')
+        chooser_intent.setType('*/*')
         chooser_intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         chooser_intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
 
@@ -1288,7 +1288,8 @@ class SettingsScreen(Screen):
         except Exception:
             pass
 
-        self._handle_credentials_selection([str(uri.toString())])
+        selected_uri = str(uri.toString())
+        Clock.schedule_once(lambda *_: self._handle_credentials_selection([selected_uri]), 0)
 
     def _handle_credentials_selection(self, selection):
         if not selection:
@@ -1302,7 +1303,7 @@ class SettingsScreen(Screen):
             cfg = Config.load()
             cfg['creds_path'] = stable_path
             Config.save(cfg)
-            self._show_settings_message('Credenciales', 'Archivo JSON importado correctamente.')
+            self._show_settings_message('Credenciales', f'Archivo JSON importado correctamente.\n{stable_path}')
         except Exception as e:
             self._show_settings_message('Error', str(e))
 
