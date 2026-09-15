@@ -808,6 +808,7 @@ class ManualScreen(Screen):
                     rutina,
                     ex.get('Ejercicio', ''),
                     f'{index}/{total_series}',
+                    '',
                     ex.get('Método', ''),
                     ex.get('Tiempo', ''),
                     '',
@@ -815,6 +816,7 @@ class ManualScreen(Screen):
                     series.get('Reps', ''),
                     series.get('Peso', ''),
                     series.get('RIR', ''),
+                    '',
                     ex.get('Anotaciones', ''),
                 ])
         return rows

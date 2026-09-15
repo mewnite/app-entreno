@@ -160,50 +160,152 @@ class GoogleSheetsClient:
                     raise
 
     def append_training(self, spreadsheet_title: str, session_meta: dict, rows: list):
-        """Append a training block (exercise rows) using the template layout."""
+        """Fill the existing day template without replacing its layout."""
         if self.client is None:
             raise RuntimeError('Cliente no configurado. Llama a configure_from_service_account() primero.')
 
-        sh = self._open_or_create_spreadsheet(spreadsheet_title)
+        try:
+            sh = self.client.open(spreadsheet_title)
+        except Exception as exc:
+            raise RuntimeError(
+                f'No se encontró el Spreadsheet existente "{spreadsheet_title}". '
+                'Crea o comparte la plantilla con la cuenta de servicio antes de enviar.'
+            ) from exc
         ws = sh.sheet1
 
-        # Ensure template/layout exists (merges, headers, formats)
+        header_row, columns = self._find_template_header(ws)
+        data_start = header_row + 1
+        capacity = self._template_capacity(sh, ws, data_start)
+        if len(rows) > capacity:
+            raise ValueError(
+                f'La plantilla tiene {capacity} filas disponibles y la sesión necesita {len(rows)}. '
+                'Añade más filas al cuadro existente conservando su formato.'
+            )
+
+        merged_ranges = self._merged_ranges(ws)
+        requests = []
+        for row_offset, row in enumerate(rows):
+            sheet_row = data_start + row_offset
+            for source_column, value in enumerate(row):
+                target_column = columns[source_column]
+                if self._is_merged_non_top_left(merged_ranges, sheet_row, target_column):
+                    continue
+                requests.append({
+                    'updateCells': {
+                        'range': {
+                            'sheetId': ws._properties.get('sheetId'),
+                            'startRowIndex': sheet_row - 1,
+                            'endRowIndex': sheet_row,
+                            'startColumnIndex': target_column,
+                            'endColumnIndex': target_column + 1,
+                        },
+                        'rows': [{'values': [{'userEnteredValue': {'stringValue': str(value or '')}}]}],
+                        'fields': 'userEnteredValue',
+                    }
+                })
+
+        for key, address in {'Mesociclo': 'H1', 'Microciclo': 'J1'}.items():
+            if session_meta.get(key):
+                ws.update(address, [[session_meta[key]]], value_input_option='RAW')
+        if requests:
+            sh.batch_update({'requests': requests})
+
+    @staticmethod
+    def _normalise_header(value):
+        import unicodedata
+        value = unicodedata.normalize('NFKD', str(value or ''))
+        value = ''.join(char for char in value if not unicodedata.combining(char))
+        return ' '.join(value.lower().replace('\n', ' ').split())
+
+    def _find_template_header(self, ws):
+        expected = [
+            'dia', 'ejercicio', 'series', 'margen de repeticiones', 'metodo',
+            'tempo', 'tiempo de descanso', 'repeticiones anterior mesociclo',
+            'repeticiones', 'peso utilizado', 'rir', 'rpe 1 a 10', 'anotaciones',
+        ]
+        aliases = {
+            'margen de repeticiones': {'margen de repeticiones', 'margen reps'},
+            'repeticiones anterior mesociclo': {
+                'repeticiones anterior mesociclo', 'repeticiones semana anterior',
+            },
+            'rpe 1 a 10': {'rpe 1 a 10', 'rpe'},
+        }
+        values = ws.get_all_values()
+        for row_number, row in enumerate(values, start=1):
+            normalised = {self._normalise_header(cell): index for index, cell in enumerate(row)}
+            columns = []
+            for header in expected:
+                accepted = aliases.get(header, {header})
+                match = next((normalised[name] for name in accepted if name in normalised), None)
+                if match is None:
+                    break
+                columns.append(match)
+            if len(columns) == len(expected):
+                return row_number, columns
+        raise ValueError(
+            'No se encontró la fila de encabezados de la plantilla. '
+            'La hoja debe conservar los encabezados del cuadro de la imagen.'
+        )
+
+    def _template_capacity(self, sh, ws, data_start):
+        """Count formatted rows before the template's separator band."""
         try:
-            self._ensure_template(sh)
+            metadata = sh.fetch_sheet_metadata(params={
+                'includeGridData': 'true',
+                'ranges': [f"'{ws.title}'!A{data_start}:M200"],
+            })
+            sheet_data = metadata.get('sheets', [{}])[0].get('data', [{}])[0]
+            row_data = sheet_data.get('rowData', [])
+            capacity = 0
+            for row in row_data:
+                values = row.get('values', [])
+                if self._is_separator_row(values):
+                    break
+                if any(value.get('userEnteredFormat') or value.get('effectiveFormat') or value.get('userEnteredValue') for value in values):
+                    capacity += 1
+                elif capacity:
+                    break
+            if capacity:
+                return capacity
         except Exception:
-            # non-fatal, continue
             pass
 
-        # Update top meta values (like the reference image: Mesociclo=2, Microciclo=2/3, etc.)
-        # Layout:
-        # - A1:A2 merged -> "Fecha"
-        # - G1 -> "Mesociclo", H1 -> value
-        # - I1 -> "Microciclo (semana)", J1 -> value
-        try:
-            ws.update('H1', [[session_meta.get('Mesociclo', '')]])
-            ws.update('J1', [[session_meta.get('Microciclo', '')]])
-        except Exception:
-            pass
-
-        if not rows:
-            return
-
-        # Append exercise rows (data begins on row 3)
         existing = ws.get_all_values()
-        start_index = len(existing) + 1
-        try:
-            ws.append_rows(rows, value_input_option='RAW')
-        except Exception:
-            raise
+        return max(0, len(existing) - data_start + 1)
 
-        # Add a red separator row (like the screenshot bottom band)
+    @staticmethod
+    def _is_separator_row(values):
+        colours = []
+        for value in values:
+            fmt = value.get('userEnteredFormat', {})
+            colour = fmt.get('backgroundColor', {})
+            if colour:
+                colours.append(colour)
+        return bool(colours) and sum(
+            colour.get('red', 0) > 0.7 and colour.get('green', 0) < 0.4
+            and colour.get('blue', 0) < 0.4 for colour in colours
+        ) >= max(1, len(colours) // 2)
+
+    @staticmethod
+    def _merged_ranges(ws):
         try:
-            sep_row = [''] * 11  # A..K
-            ws.append_row(sep_row)
-            sep_idx = start_index + len(rows)
-            ws.format(f'A{sep_idx}:K{sep_idx}', {'backgroundColor': {'red': 0.85, 'green': 0.2, 'blue': 0.2}})
+            return list(ws.merged_cells.ranges)
         except Exception:
-            pass
+            return []
+
+    @staticmethod
+    def _is_merged_non_top_left(ranges, row, column):
+        for merged in ranges:
+            start_row = getattr(merged, 'start_row_index', None)
+            end_row = getattr(merged, 'end_row_index', None)
+            start_column = getattr(merged, 'start_column_index', None)
+            end_column = getattr(merged, 'end_column_index', None)
+            if None in (start_row, end_row, start_column, end_column):
+                continue
+            zero_based_row = row - 1
+            if start_row < zero_based_row < end_row and start_column <= column < end_column:
+                return True
+        return False
 
     def _ensure_template(self, sh):
         """Create/update spreadsheet template to match desired layout (merges, headers, widths, colors)."""
