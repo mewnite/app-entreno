@@ -1,4 +1,8 @@
+service_account.json
 gimrutine-*.json
+training_session_backup.json
+.venv
+__pycache__gimrutine-*.json
 .venv
 venv
 build/
