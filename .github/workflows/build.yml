@@ -27,7 +27,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3.12 python3.12-venv python3.12-dev git unzip build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw-dev wget libltdl-dev autoconf-archive
+          sudo apt-get install -y python3.12 python3.12-venv python3.12-dev git unzip build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncurses-dev wget libltdl-dev autoconf-archive
 
       - name: Setup Android SDK + FIX sdkmanager
         run: |
