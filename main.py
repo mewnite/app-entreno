@@ -266,6 +266,12 @@ ScreenManager:
                         FieldInput:
                             id: ejercicio
                             hint_text: 'Ejercicio'
+                        GridLayout:
+                            id: exercise_suggestions
+                            cols: 1
+                            size_hint_y: None
+                            height: self.minimum_height
+                            spacing: dp(4)
                         FieldInput:
                             id: metodo
                             hint_text: 'Metodo'
@@ -536,6 +542,19 @@ class ManualScreen(Screen):
     reps_default = ObjectProperty(None)
     rir_default = ObjectProperty(None)
     series_editor = ObjectProperty(None)
+    exercise_catalog = [
+        'Press banca', 'Press plano', 'Pecho plano',
+        'Press inclinado con mancuernas', 'Press militar',
+        'Press de hombros', 'Press cerrado', 'Aperturas con mancuernas',
+        'Remo con barra', 'Remo con mancuerna', 'Remo gironda toma neutra',
+        'Jalon al pecho', 'Jalon al pecho agarre neutro', 'Dominadas',
+        'Peso muerto', 'Peso muerto rumano', 'Sentadilla', 'Prensa 45',
+        'Sentadilla hack', 'Extension de cuadriceps', 'Curl femoral tumbado',
+        'Curl femoral sentado', 'Hip thrust', 'Elevacion de talon',
+        'Vuelos laterales con mancuernas', 'Curl de biceps con barra',
+        'Curl de biceps con mancuernas', 'Extension de triceps en polea',
+        'Extension de triceps francesa', 'Fondos en paralelas',
+    ]
     _backup_event = None
     _state_restored = False
     _suspend_backup = False
@@ -549,8 +568,46 @@ class ManualScreen(Screen):
             widget = self.ids.get(field_name)
             if widget is not None:
                 widget.bind(text=lambda *_: self.schedule_backup_save())
+        self.ejercicio.bind(text=self.update_exercise_suggestions)
         if not self.get_series_rows():
             self.add_series_row()
+
+    def update_exercise_suggestions(self, _instance=None, text=''):
+        from kivy.uix.button import Button
+
+        container = self.ids.exercise_suggestions
+        container.clear_widgets()
+        query = (text or self.ejercicio.text).strip().lower()
+        if len(query) < 2:
+            return
+        suggestions = [
+            exercise for exercise in self.exercise_catalog
+            if query in exercise.lower()
+        ][:6]
+        for exercise in suggestions:
+            button = Button(
+                text=exercise,
+                size_hint_y=None,
+                height=dp(36),
+                halign='left',
+                valign='middle',
+                background_normal='',
+                background_down='',
+                background_color=(0.20, 0.43, 0.78, 1),
+                color=(1, 1, 1, 1),
+            )
+            button.bind(size=lambda instance, _size: setattr(instance, 'text_size', (instance.width - dp(16), None)))
+            button.bind(on_release=lambda _button, value=exercise: self.select_exercise_suggestion(value))
+            container.add_widget(button)
+
+    def select_exercise_suggestion(self, exercise):
+        self._suspend_backup = True
+        try:
+            self.ejercicio.text = exercise
+        finally:
+            self._suspend_backup = False
+        self.ids.exercise_suggestions.clear_widgets()
+        self.schedule_backup_save()
 
     def on_pre_enter(self):
         if not self._state_restored:
@@ -760,6 +817,7 @@ class ManualScreen(Screen):
                 if widget is not None:
                     widget.text = ''
             self.set_series_entries([{}])
+            self.ids.exercise_suggestions.clear_widgets()
         finally:
             self._suspend_backup = False
         self.schedule_backup_save()
@@ -775,6 +833,7 @@ class ManualScreen(Screen):
                 if widget is not None:
                     widget.text = ''
             self.set_series_entries([{}])
+            self.ids.exercise_suggestions.clear_widgets()
         finally:
             self._suspend_backup = False
 

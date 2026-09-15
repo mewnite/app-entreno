@@ -173,21 +173,25 @@ class GoogleSheetsClient:
             ) from exc
         ws = sh.sheet1
 
-        header_row, columns = self._find_template_header(ws)
-        data_start = header_row + 1
-        capacity = self._template_capacity(sh, ws, data_start)
-        if len(rows) > capacity:
+        blocks = self._find_template_blocks(ws)
+        block = next(
+            (candidate for candidate in blocks
+             if self._template_capacity(sh, ws, candidate['data_start'], candidate['end_row']) >= len(rows)
+             and self._block_is_empty(ws, candidate)),
+            None,
+        )
+        if block is None:
             raise ValueError(
-                f'La plantilla tiene {capacity} filas disponibles y la sesión necesita {len(rows)}. '
-                'Añade más filas al cuadro existente conservando su formato.'
+                'No hay un bloque vacío con suficientes filas en la plantilla para esta sesión. '
+                'Añade otro bloque conservando el formato, debajo o a la derecha.'
             )
 
         merged_ranges = self._merged_ranges(ws)
         requests = []
         for row_offset, row in enumerate(rows):
-            sheet_row = data_start + row_offset
+            sheet_row = block['data_start'] + row_offset
             for source_column, value in enumerate(row):
-                target_column = columns[source_column]
+                target_column = block['columns'][source_column]
                 if self._is_merged_non_top_left(merged_ranges, sheet_row, target_column):
                     continue
                 requests.append({
@@ -217,7 +221,7 @@ class GoogleSheetsClient:
         value = ''.join(char for char in value if not unicodedata.combining(char))
         return ' '.join(value.lower().replace('\n', ' ').split())
 
-    def _find_template_header(self, ws):
+    def _find_template_blocks(self, ws):
         expected = [
             'dia', 'ejercicio', 'series', 'margen de repeticiones', 'metodo',
             'tempo', 'tiempo de descanso', 'repeticiones anterior mesociclo',
@@ -231,33 +235,64 @@ class GoogleSheetsClient:
             'rpe 1 a 10': {'rpe 1 a 10', 'rpe'},
         }
         values = ws.get_all_values()
+        blocks = []
         for row_number, row in enumerate(values, start=1):
-            normalised = {self._normalise_header(cell): index for index, cell in enumerate(row)}
-            columns = []
-            for header in expected:
-                accepted = aliases.get(header, {header})
-                match = next((normalised[name] for name in accepted if name in normalised), None)
-                if match is None:
-                    break
-                columns.append(match)
-            if len(columns) == len(expected):
-                return row_number, columns
+            for start_column in range(max(0, len(row) - len(expected) + 1)):
+                columns = []
+                for offset, header in enumerate(expected):
+                    accepted = aliases.get(header, {header})
+                    cell = self._normalise_header(row[start_column + offset])
+                    if cell not in accepted:
+                        break
+                    columns.append(start_column + offset)
+                if len(columns) != len(expected):
+                    continue
+                end_row = self._find_block_end(values, row_number + 1, start_column, len(expected))
+                blocks.append({
+                    'header_row': row_number,
+                    'data_start': row_number + 1,
+                    'end_row': end_row,
+                    'columns': columns,
+                })
+        if blocks:
+            return blocks
         raise ValueError(
             'No se encontró la fila de encabezados de la plantilla. '
             'La hoja debe conservar los encabezados del cuadro de la imagen.'
         )
 
-    def _template_capacity(self, sh, ws, data_start):
+    @staticmethod
+    def _find_block_end(values, data_start, start_column, column_count):
+        for row_number in range(data_start, len(values) + 1):
+            row = values[row_number - 1]
+            if any(GoogleSheetsClient._normalise_header(cell) in {'dia', 'día'} for cell in row[start_column:start_column + column_count]):
+                return row_number - 1
+        return len(values)
+
+    def _block_is_empty(self, ws, block):
+        values = ws.get(f"{self._a1(block['columns'][1], block['data_start'])}:{self._a1(block['columns'][1], block['end_row'])}")
+        return not any(str(cell[0]).strip() for cell in values if cell)
+
+    @staticmethod
+    def _a1(column, row):
+        result = ''
+        column += 1
+        while column:
+            column, remainder = divmod(column - 1, 26)
+            result = chr(65 + remainder) + result
+        return f'{result}{row}'
+
+    def _template_capacity(self, sh, ws, data_start, end_row=None):
         """Count formatted rows before the template's separator band."""
         try:
             metadata = sh.fetch_sheet_metadata(params={
                 'includeGridData': 'true',
-                'ranges': [f"'{ws.title}'!A{data_start}:M200"],
+                'ranges': [f"'{ws.title}'!A{data_start}:M{end_row or 200}"],
             })
             sheet_data = metadata.get('sheets', [{}])[0].get('data', [{}])[0]
             row_data = sheet_data.get('rowData', [])
             capacity = 0
-            for row in row_data:
+            for row in row_data[:(end_row - data_start + 1) if end_row else None]:
                 values = row.get('values', [])
                 if self._is_separator_row(values):
                     break
@@ -271,7 +306,8 @@ class GoogleSheetsClient:
             pass
 
         existing = ws.get_all_values()
-        return max(0, len(existing) - data_start + 1)
+        limit = end_row or len(existing)
+        return max(0, min(limit, len(existing)) - data_start + 1)
 
     @staticmethod
     def _is_separator_row(values):
