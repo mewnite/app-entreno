@@ -175,15 +175,17 @@ class GoogleSheetsClient:
 
         blocks = self._find_template_blocks(ws)
         block = next(
-            (candidate for candidate in blocks
-             if self._template_capacity(sh, ws, candidate['data_start'], candidate['end_row']) >= len(rows)
-             and self._block_is_empty(ws, candidate)),
+            (candidate for block_index, candidate in enumerate(blocks, start=1)
+             if self._block_matches_id(
+                 ws, candidate, block_index, session_meta.get('BloqueID') or session_meta.get('Rutina'), session_meta
+             )
+             and self._template_capacity(sh, ws, candidate['data_start'], candidate['end_row']) >= len(rows)),
             None,
         )
         if block is None:
             raise ValueError(
-                'No hay un bloque vacío con suficientes filas en la plantilla para esta sesión. '
-                'Añade otro bloque conservando el formato, debajo o a la derecha.'
+                f'No se encontró el bloque con ID numérico "{session_meta.get("BloqueID") or session_meta.get("Rutina")}" '
+                'o no tiene suficientes filas para esta sesión.'
             )
 
         merged_ranges = self._merged_ranges(ws)
@@ -272,6 +274,27 @@ class GoogleSheetsClient:
     def _block_is_empty(self, ws, block):
         values = ws.get(f"{self._a1(block['columns'][1], block['data_start'])}:{self._a1(block['columns'][1], block['end_row'])}")
         return not any(str(cell[0]).strip() for cell in values if cell)
+
+    def _block_matches_id(self, ws, block, block_index, block_id, session_meta=None):
+        if not block_id:
+            return False
+        values = ws.get(
+            f"{self._a1(block['columns'][0], block['data_start'])}:"
+            f"{self._a1(block['columns'][0], block['end_row'])}"
+        )
+        expected = self._normalise_header(block_id)
+        if any(row and self._normalise_header(row[0]) == expected for row in values):
+            return True
+
+        numeric_key = str(block_id).strip().split('-')
+        if len(numeric_key) == 3 and all(part.isdigit() for part in numeric_key):
+            mesociclo, microciclo, requested_index = numeric_key
+            return (
+                str(session_meta.get('Mesociclo', '')).strip() == mesociclo
+                and str(session_meta.get('Microciclo', '')).strip() == microciclo
+                and block_index == int(requested_index)
+            )
+        return False
 
     @staticmethod
     def _a1(column, row):

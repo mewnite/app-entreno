@@ -244,11 +244,17 @@ ScreenManager:
                             id: rutina
                             hint_text: 'Rutina (ej: Pierna fuerza)'
                         FieldInput:
+                            id: bloque_id
+                            hint_text: 'ID bloque (numero)'
+                            input_filter: 'int'
+                        FieldInput:
                             id: mesociclo
                             hint_text: 'Mesociclo'
+                            input_filter: 'int'
                         FieldInput:
                             id: microciclo
                             hint_text: 'Microciclo'
+                            input_filter: 'int'
                         FieldInput:
                             id: reps_default
                             hint_text: 'Reps por defecto'
@@ -541,6 +547,7 @@ class ManualScreen(Screen):
     anotaciones = ObjectProperty(None)
     reps_default = ObjectProperty(None)
     rir_default = ObjectProperty(None)
+    bloque_id = ObjectProperty(None)
     series_editor = ObjectProperty(None)
     exercise_catalog = [
         'Press banca', 'Press plano', 'Pecho plano',
@@ -554,6 +561,23 @@ class ManualScreen(Screen):
         'Vuelos laterales con mancuernas', 'Curl de biceps con barra',
         'Curl de biceps con mancuernas', 'Extension de triceps en polea',
         'Extension de triceps francesa', 'Fondos en paralelas',
+        'Press en maquina convergente', 'Press unilateral con mancuerna',
+        'Press declinado', 'Press Arnold', 'Press landmine', 'Flexiones',
+        'Flexiones lastradas', 'Remo en maquina', 'Remo pecho apoyado',
+        'Remo en polea baja', 'Remo unilateral en polea', 'Jalon con brazos rectos',
+        'Pullover en polea', 'Pullover con mancuerna', 'Dominadas supinas',
+        'Dominadas asistidas', 'Peso muerto sumo', 'Peso muerto con trap bar',
+        'Buenos dias', 'Zancadas', 'Zancadas bulgaras', 'Step up', 'Hack squat',
+        'Sentadilla frontal', 'Sentadilla goblet', 'Prensa horizontal',
+        'Extension de cadera', 'Patada de gluteo en polea', 'Abduccion en maquina',
+        'Aduccion en maquina', 'Puente de gluteo', 'Curl nordico',
+        'Curl femoral de pie', 'Elevacion de talon sentado',
+        'Elevacion de talon de pie', 'Face pull', 'Pajaros con mancuernas',
+        'Pajaros en maquina', 'Encogimientos de trapecio', 'Curl martillo',
+        'Curl spider', 'Curl predicador', 'Curl en polea',
+        'Extension de triceps con cuerda', 'Extension de triceps unilateral',
+        'Press frances con barra', 'Patada de triceps', 'Crunch en polea',
+        'Elevacion de piernas', 'Plancha', 'Rueda abdominal',
     ]
     _backup_event = None
     _state_restored = False
@@ -561,7 +585,7 @@ class ManualScreen(Screen):
 
     def on_kv_post(self, base_widget):
         fields = [
-            'fecha', 'rutina', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
+            'fecha', 'rutina', 'bloque_id', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
             'ejercicio', 'metodo', 'tiempo', 'reps_prev', 'anotaciones',
         ]
         for field_name in fields:
@@ -624,6 +648,7 @@ class ManualScreen(Screen):
         return {
             'fecha': self.ids.fecha.text,
             'rutina': self.ids.rutina.text,
+            'bloque_id': self.ids.bloque_id.text,
             'mesociclo': self.ids.mesociclo.text,
             'microciclo': self.ids.microciclo.text,
             'reps_default': self.ids.reps_default.text,
@@ -639,6 +664,16 @@ class ManualScreen(Screen):
             'anotaciones': self.anotaciones.text,
             'series_entries': self.get_series_entries(apply_defaults=False, include_empty=True),
         }
+
+    def build_block_key(self):
+        values = [
+            self.ids.mesociclo.text.strip(),
+            self.ids.microciclo.text.strip(),
+            self.ids.bloque_id.text.strip(),
+        ]
+        if not all(value.isdigit() for value in values):
+            raise ValueError('Completá Mesociclo, Microciclo e ID bloque usando solo números.')
+        return '-'.join(values)
 
     def persist_session_state(self):
         from utils import TrainingSession
@@ -663,6 +698,7 @@ class ManualScreen(Screen):
         try:
             self.ids.fecha.text = meta.get('fecha', '')
             self.ids.rutina.text = meta.get('rutina', '')
+            self.ids.bloque_id.text = meta.get('bloque_id', '')
             self.ids.mesociclo.text = meta.get('mesociclo', '')
             self.ids.microciclo.text = meta.get('microciclo', '')
             self.ids.reps_default.text = meta.get('reps_default', '')
@@ -826,7 +862,7 @@ class ManualScreen(Screen):
         self._suspend_backup = True
         try:
             for field_name in [
-                'fecha', 'rutina', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
+                'fecha', 'rutina', 'bloque_id', 'mesociclo', 'microciclo', 'reps_default', 'rir_default',
                 'ejercicio', 'metodo', 'tiempo', 'reps_prev', 'anotaciones',
             ]:
                 widget = self.ids.get(field_name)
@@ -858,7 +894,7 @@ class ManualScreen(Screen):
 
     def build_rows_for_exercises(self, exercises):
         rows = []
-        rutina = self.ids.rutina.text
+        rutina = self.build_block_key()
         for ex in exercises:
             series_entries = ex.get('SeriesEntries') or []
             total_series = max(len(series_entries), 1)
@@ -894,11 +930,13 @@ class ManualScreen(Screen):
             client.configure_from_service_account(config.get('creds_path'))
             sheet_name = config.get('sheet_name', 'Entrenamientos')
             rows = self.build_rows_for_exercises([exercise])
+            block_key = self.build_block_key()
             client.append_training(
                 sheet_name,
                 {
                     'Fecha': self.ids.fecha.text,
                     'Rutina': self.ids.rutina.text,
+                    'BloqueID': block_key,
                     'Mesociclo': self.ids.mesociclo.text,
                     'Microciclo': self.ids.microciclo.text,
                 },
@@ -995,10 +1033,11 @@ class ManualScreen(Screen):
             rutina = self.ids.rutina.text
             meso = self.ids.mesociclo.text
             micro = self.ids.microciclo.text
+            bloque_id = self.build_block_key()
             rows = self.build_rows_for_exercises(exercises)
             client.append_training(
                 sheet_name,
-                {'Fecha': fecha, 'Rutina': rutina, 'Mesociclo': meso, 'Microciclo': micro},
+                {'Fecha': fecha, 'Rutina': rutina, 'BloqueID': bloque_id, 'Mesociclo': meso, 'Microciclo': micro},
                 rows,
             )
             TrainingSession.clear()
